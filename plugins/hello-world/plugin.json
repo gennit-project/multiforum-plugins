@@ -1,0 +1,8 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "0.1.0",
+  "entry": "dist/index.js",
+  "events": ["downloadableFile.created","downloadableFile.updated"],
+  "secrets": {}
+}

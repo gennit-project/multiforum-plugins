@@ -1,0 +1,8 @@
+     {
+       "id": "security-attachment-scan",
+       "name": "Security: Attachment Scan",
+       "version": "0.1.0",
+       "entry": "dist/index.js",
+       "events": ["downloadableFile.created","downloadableFile.updated"],
+       "secrets": {"VIRUS_TOTAL_API_KEY": {"scope":"server","required": true}}
+     }
