@@ -239,3 +239,83 @@ Your Multiforum server will read `registry.json` to know what plugins are availa
     --project="${PROJECT_ID}" --location=global \
     --workload-identity-pool="${POOL_ID}"
   ```
+
+## Post-publish verification
+
+Once you push a tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) and the **Publish Plugins** workflow finishes, you can verify that bundles and the registry were created in your bucket.
+
+### 1. List all uploaded objects
+
+```bash
+BUCKET="mf-plugins-prod"
+
+# Recursively list everything under the bucket
+gcloud storage ls -r "gs://${BUCKET}"
+```
+
+You should see plugin tarballs, hashes, and `registry.json`.
+Example:
+
+```
+gs://mf-plugins-prod/plugins/hello-world/0.1.0/bundle.tgz
+gs://mf-plugins-prod/plugins/hello-world/0.1.0/bundle.sha256
+gs://mf-plugins-prod/plugins/hello-world/0.1.0/plugin.json
+gs://mf-plugins-prod/plugins/security-attachment-scan/0.1.0/bundle.tgz
+gs://mf-plugins-prod/plugins/security-attachment-scan/0.1.0/bundle.sha256
+gs://mf-plugins-prod/registry.json
+```
+
+### 2. Confirm `registry.json` exists
+
+```bash
+gcloud storage ls "gs://${BUCKET}/registry.json"
+```
+
+### 3. Inspect registry.json contents
+
+```bash
+gcloud storage cat "gs://${BUCKET}/registry.json" | jq
+```
+
+You should see something like:
+
+```json
+{
+  "updatedAt": "2025-08-30T23:59:59Z",
+  "plugins": [
+    {
+      "id": "hello-world",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "tarballUrl": "gs://mf-plugins-prod/plugins/hello-world/0.1.0/bundle.tgz",
+          "integritySha256": "..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 4. (Optional) Verify integrity hashes
+
+Download a bundle and compare its SHA256 with the stored `.sha256` file:
+
+```bash
+# Download locally
+gcloud storage cp "gs://${BUCKET}/plugins/hello-world/0.1.0/bundle.tgz" /tmp/bundle.tgz
+
+# Compute SHA256
+shasum -a 256 /tmp/bundle.tgz
+
+# Compare with recorded value
+gcloud storage cat "gs://${BUCKET}/plugins/hello-world/0.1.0/bundle.sha256"
+```
+
+They must match exactly.
+
+---
+
+✅ If you see plugin tarballs under `plugins/<id>/<version>/...` **and** `registry.json` at the bucket root, your publishing workflow worked and your Multiforum server can now load plugins from GCS.
+
+```
