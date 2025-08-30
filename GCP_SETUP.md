@@ -20,8 +20,7 @@ SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
 POOL_ID="github-pool"                     # WIF pool id
 PROVIDER_ID="github-provider"             # WIF provider id
-REPO="your-github-org/your-plugins-repo"  # e.g. CatherineLuse/mf-official-plugins
-
+REPO="your-github-org/your-plugins-repo"  # e.g. gennit-project/multiforum-plugins
 ```
 
 ---
@@ -77,6 +76,7 @@ gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
 ```
 
 > ✅ This grants the SA access **only to this bucket**, not all buckets in the project.
+> `objectAdmin` is required to upload bundles; if you only need to read, use `roles/storage.objectViewer`.
 
 ---
 
@@ -125,11 +125,11 @@ gcloud iam workload-identity-pools providers create-oidc "${PROVIDER_ID}" \
   --display-name="GitHub OIDC Provider" \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-  --attribute-condition="attribute.repository=='${REPO}' && startsWith(attribute.ref, 'refs/tags/')"
+  --attribute-condition="attribute.repository=='${REPO}' && (string(attribute.ref).startsWith('refs/tags/') || string(attribute.ref).startsWith('refs/heads/'))"
 ```
 
 * `attribute.repository=='${REPO}'` → only trust tokens from your repo.
-* `startsWith(attribute.ref, 'refs/tags/')` → only allow tags (e.g. `v0.1.0`).
+* `(startsWith(...))` → allow both tags and branches (so smoke tests and tagged releases both work).
 
 ---
 
@@ -141,6 +141,15 @@ Bind the repo to the SA so jobs can impersonate it:
 gcloud iam service-accounts add-iam-policy-binding "${SA_EMAIL}" \
   --project="${PROJECT_ID}" \
   --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPO}"
+```
+
+⚠️ Some orgs/policies also require this role for minting access tokens:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding "${SA_EMAIL}" \
+  --project="${PROJECT_ID}" \
+  --role="roles/iam.serviceAccountTokenCreator" \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPO}"
 ```
 
@@ -191,7 +200,8 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - run: gcloud --version
+      - name: Who am I?
+        run: gcloud auth list
 
       - name: List bucket (should succeed)
         run: gcloud storage ls gs://$GCS_BUCKET
@@ -213,3 +223,19 @@ When you push a tag like `v0.1.0`, it will:
 * write `gs://$BUCKET/registry.json` at the bucket root.
 
 Your Multiforum server will read `registry.json` to know what plugins are available.
+
+---
+
+## Troubleshooting
+
+* **403 `getAccessToken` denied** → service account is missing `roles/iam.workloadIdentityUser` (and sometimes `roles/iam.serviceAccountTokenCreator`).
+* **403 on bucket access** → service account is missing `roles/storage.objectAdmin` (for upload) or `roles/storage.objectViewer` (for read) on the **bucket**.
+* **Workflow won’t run manually** → ensure workflow has `on: workflow_dispatch`.
+* **Still stuck?** Run these to inspect current setup:
+
+  ```bash
+  gcloud iam service-accounts get-iam-policy "${SA_EMAIL}" --project="${PROJECT_ID}"
+  gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
+    --project="${PROJECT_ID}" --location=global \
+    --workload-identity-pool="${POOL_ID}"
+  ```
