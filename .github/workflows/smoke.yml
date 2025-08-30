@@ -1,0 +1,22 @@
+name: Smoke GCS
+
+on: [workflow_dispatch]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud --version
+
+      - name: List bucket (should succeed)
+        run: gcloud storage ls gs://mf-plugins-prod  # change if your bucket name differs

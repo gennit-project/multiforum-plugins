@@ -47,9 +47,9 @@ At this stage, the repo contains two example plugins:
 
 ### Prerequisites
 
-* Node.js ≥ 18
-* npm / pnpm / yarn
-* TypeScript
+- Node.js ≥ 18
+- npm / pnpm / yarn
+- TypeScript
 
 ### Build a plugin
 
@@ -65,6 +65,10 @@ npm run build
 cd ../hello-world
 npm install
 npm run build
+```
+
+----
+
 ```
 
 This generates `dist/index.js` referenced by each manifest.
@@ -92,6 +96,7 @@ This repo publishes **deterministic tarballs** per plugin+version to **Google Cl
 ### GCS layout (private bucket)
 
 ```
+
 gs://mf-plugins-prod/
   registry.json
   plugins/
@@ -105,6 +110,7 @@ gs://mf-plugins-prod/
         bundle.tgz
         bundle.sha256
         plugin.json
+
 ```
 
 > You can also store `plugins/<id>/latest.json` → `{ "version": "0.1.0" }` as a convenience (optional).
@@ -114,9 +120,12 @@ gs://mf-plugins-prod/
 Each **bundle.tgz** includes only what the worker needs:
 
 ```
+
 plugin.json
 dist/index.js
+
 # optionally: dist/*.map, README.md
+
 ```
 
 We make tarballs **deterministic** so their SHA256 hash is stable (sort entries, zero timestamps, numeric owners).
