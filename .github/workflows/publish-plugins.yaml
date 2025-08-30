@@ -34,6 +34,10 @@ jobs:
       - name: Install deps & build all plugins
         run: |
           set -euo pipefail
+          # Install root dependencies first (includes TypeScript)
+          npm ci
+          
+          # Then install and build each plugin
           for d in plugins/*; do
             if [ -f "$d/package.json" ]; then
               (cd "$d" && npm ci && npm run build)

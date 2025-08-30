@@ -1,0 +1,21 @@
+{
+  "name": "multiforum-plugins",
+  "version": "1.0.0",
+  "description": "Multiforum official plugins repository",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:security-attachment-scan && npm run build:hello-world",
+    "build:security-attachment-scan": "cd plugins/security-attachment-scan && npm run build",
+    "build:hello-world": "cd plugins/hello-world && npm run build",
+    "install:all": "npm run install:security-attachment-scan && npm run install:hello-world",
+    "install:security-attachment-scan": "cd plugins/security-attachment-scan && npm install",
+    "install:hello-world": "cd plugins/hello-world && npm install"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

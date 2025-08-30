@@ -1,0 +1,21 @@
+{
+  "name": "security-attachment-scan",
+  "version": "0.1.0",
+  "description": "Security plugin that scans attachments using VirusTotal API",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc index.ts --outDir dist --target ES2020 --module CommonJS --moduleResolution node --esModuleInterop --skipLibCheck --resolveJsonModule",
+    "clean": "rm -rf dist && mkdir -p dist"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/node-fetch": "^2.6.4",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
