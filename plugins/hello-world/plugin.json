@@ -2,7 +2,8 @@
   "id": "hello-world",
   "name": "Hello World",
   "version": "0.1.0",
+  "description": "A simple demonstration plugin that logs when content is created or updated",
   "entry": "dist/index.js",
-  "events": ["downloadableFile.created","downloadableFile.updated"],
-  "secrets": {}
+  "events": ["downloadableFile.created", "downloadableFile.updated"],
+  "secrets": []
 }

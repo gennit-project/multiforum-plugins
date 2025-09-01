@@ -1,8 +1,17 @@
-     {
-       "id": "security-attachment-scan",
-       "name": "Security: Attachment Scan",
-       "version": "0.1.0",
-       "entry": "dist/index.js",
-       "events": ["downloadableFile.created","downloadableFile.updated"],
-       "secrets": {"VIRUS_TOTAL_API_KEY": {"scope":"server","required": true}}
-     }
+{
+  "id": "security-attachment-scan",
+  "name": "Security: Attachment Scan",
+  "version": "0.1.0",
+  "description": "Scans uploaded file attachments for malware using the VirusTotal API",
+  "entry": "dist/index.js",
+  "events": ["downloadableFile.created", "downloadableFile.updated"],
+  "secrets": [
+    {
+      "key": "VIRUS_TOTAL_API_KEY",
+      "scope": "server",
+      "required": true,
+      "description": "VirusTotal API key for malware scanning of uploaded files",
+      "validationHint": "Should be a valid VirusTotal API key starting with a letter and containing alphanumeric characters"
+    }
+  ]
+}
