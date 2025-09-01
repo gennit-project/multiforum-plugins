@@ -319,3 +319,11 @@ They must match exactly.
 ✅ If you see plugin tarballs under `plugins/<id>/<version>/...` **and** `registry.json` at the bucket root, your publishing workflow worked and your Multiforum server can now load plugins from GCS.
 
 ```
+
+## Grant the backend service account read access to the bucket
+
+```
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+  --member="serviceAccount:${BACKEND_SA_EMAIL}" \
+  --role="roles/storage.objectViewer"
+```
