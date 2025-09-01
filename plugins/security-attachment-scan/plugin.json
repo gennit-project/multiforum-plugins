@@ -1,7 +1,7 @@
 {
   "id": "security-attachment-scan",
   "name": "Security: Attachment Scan",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scans uploaded file attachments for malware using the VirusTotal API",
   "entry": "dist/index.js",
   "events": ["downloadableFile.created", "downloadableFile.updated"],
