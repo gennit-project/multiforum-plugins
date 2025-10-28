@@ -1,8 +1,6 @@
 // Security: Attachment Scan plugin
 // Runs at server scope and scans attachments using the VirusTotal API.
 
-import fetch from "node-fetch";
-
 interface HookContext {
   scope: "SERVER" | "FORUM";
   channelId?: string;
@@ -22,10 +20,11 @@ interface HookContext {
 }
 
 interface EventEnvelope {
-  type: "downloadableFile.created" | "downloadableFile.updated";
+  type: "downloadableFile.created" | "downloadableFile.updated" | "downloadableFile.downloaded";
   payload: {
     commentId?: string;
     discussionId?: string;
+    downloadableFileId?: string;
     attachmentUrls?: string[];
   };
 }
@@ -35,10 +34,16 @@ export default class SecurityAttachmentScan {
   private logger: HookContext['log'];
   private virusTotalKey?: string;
   private isConfigured: boolean;
+  private fetchImpl: typeof fetch | null;
 
   constructor(context: HookContext) {
     this.context = context;
     this.logger = context.log;
+    this.fetchImpl = typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null;
+    
+    if (!this.fetchImpl) {
+      this.logger("Fetch API is not available in this runtime");
+    }
     
     // Access server-scoped secrets
     this.virusTotalKey = context.secrets?.server?.VIRUS_TOTAL_API_KEY;
@@ -46,7 +51,7 @@ export default class SecurityAttachmentScan {
     // Validate configuration
     this.isConfigured = this.validateConfiguration();
     
-    if (!this.isConfigured) {
+    if (!this.isConfigured || !this.fetchImpl) {
       this.logger("VIRUS_TOTAL_API_KEY is required but not configured");
     }
   }
@@ -67,7 +72,7 @@ export default class SecurityAttachmentScan {
 
   async handleEvent(event: EventEnvelope) {
     // Always check configuration first
-    if (!this.isConfigured) {
+    if (!this.isConfigured || !this.fetchImpl) {
       return {
         success: false,
         error: 'Plugin not configured - missing required secrets',
@@ -89,7 +94,7 @@ export default class SecurityAttachmentScan {
           this.logger(`Scanning attachment: ${url}`);
           
           // VirusTotal API call
-          const res = await fetch("https://www.virustotal.com/api/v3/urls", {
+          const res = await this.fetchImpl!("https://www.virustotal.com/api/v3/urls", {
             method: "POST",
             headers: {
               "x-apikey": this.virusTotalKey!,
@@ -108,8 +113,9 @@ export default class SecurityAttachmentScan {
           this.logger(`Scan result for ${url}:`, data);
 
           // Store flag for successful scan
+          const targetId = event.payload.downloadableFileId || event.payload.commentId || event.payload.discussionId || "unknown";
           await this.context.storeFlag({
-            targetId: event.payload.commentId ?? event.payload.discussionId!,
+            targetId,
             type: "security",
             severity: "low",
             message: `Scanned ${url} successfully with VirusTotal`,
@@ -126,7 +132,8 @@ export default class SecurityAttachmentScan {
         success: true, 
         result: { 
           scannedFiles: results.length,
-          results 
+          results,
+          eventType: event.type
         }
       };
       

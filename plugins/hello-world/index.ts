@@ -20,7 +20,7 @@ interface HookContext {
 }
 
 interface EventEnvelope {
-  type: "downloadableFile.created" | "downloadableFile.updated";
+  type: "downloadableFile.created" | "downloadableFile.updated" | "downloadableFile.downloaded";
   payload: {
     commentId?: string;
     discussionId?: string;

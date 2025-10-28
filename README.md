@@ -67,13 +67,15 @@ npm install
 npm run build
 ```
 
-----
-
-```
-
 This generates `dist/index.js` referenced by each manifest.
 
----
+### Manifest validation
+
+```bash
+npm run lint:manifests
+```
+
+Run the validator before committing to ensure each manifest declares metadata, documentation paths, and UI configuration used by the admin screens.
 
 ## How Multiforum Uses These Plugins
 

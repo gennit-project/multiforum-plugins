@@ -1,20 +1,20 @@
 "use strict";
 // Security: Attachment Scan plugin
 // Runs at server scope and scans attachments using the VirusTotal API.
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const node_fetch_1 = __importDefault(require("node-fetch"));
 class SecurityAttachmentScan {
     constructor(context) {
         this.context = context;
         this.logger = context.log;
+        this.fetchImpl = typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null;
+        if (!this.fetchImpl) {
+            this.logger("Fetch API is not available in this runtime");
+        }
         // Access server-scoped secrets
         this.virusTotalKey = context.secrets?.server?.VIRUS_TOTAL_API_KEY;
         // Validate configuration
         this.isConfigured = this.validateConfiguration();
-        if (!this.isConfigured) {
+        if (!this.isConfigured || !this.fetchImpl) {
             this.logger("VIRUS_TOTAL_API_KEY is required but not configured");
         }
     }
@@ -29,7 +29,7 @@ class SecurityAttachmentScan {
     }
     async handleEvent(event) {
         // Always check configuration first
-        if (!this.isConfigured) {
+        if (!this.isConfigured || !this.fetchImpl) {
             return {
                 success: false,
                 error: 'Plugin not configured - missing required secrets',
@@ -47,7 +47,7 @@ class SecurityAttachmentScan {
                 try {
                     this.logger(`Scanning attachment: ${url}`);
                     // VirusTotal API call
-                    const res = await (0, node_fetch_1.default)("https://www.virustotal.com/api/v3/urls", {
+                    const res = await this.fetchImpl("https://www.virustotal.com/api/v3/urls", {
                         method: "POST",
                         headers: {
                             "x-apikey": this.virusTotalKey,
@@ -63,8 +63,9 @@ class SecurityAttachmentScan {
                     const data = await res.json();
                     this.logger(`Scan result for ${url}:`, data);
                     // Store flag for successful scan
+                    const targetId = event.payload.downloadableFileId || event.payload.commentId || event.payload.discussionId || "unknown";
                     await this.context.storeFlag({
-                        targetId: event.payload.commentId ?? event.payload.discussionId,
+                        targetId,
                         type: "security",
                         severity: "low",
                         message: `Scanned ${url} successfully with VirusTotal`,
@@ -80,7 +81,8 @@ class SecurityAttachmentScan {
                 success: true,
                 result: {
                     scannedFiles: results.length,
-                    results
+                    results,
+                    eventType: event.type
                 }
             };
         }

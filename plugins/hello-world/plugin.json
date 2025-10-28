@@ -4,6 +4,41 @@
   "version": "0.2.0",
   "description": "A simple demonstration plugin that logs when content is created or updated",
   "entry": "dist/index.js",
-  "events": ["downloadableFile.created", "downloadableFile.updated"],
-  "secrets": []
+  "events": [
+    "downloadableFile.created",
+    "downloadableFile.updated",
+    "downloadableFile.downloaded"
+  ],
+  "secrets": [],
+  "metadata": {
+    "author": {
+      "name": "Multiforum Team",
+      "url": "https://github.com/listical/multiforum-plugins"
+    },
+    "homepage": "https://github.com/listical/multiforum-plugins/tree/main/plugins/hello-world",
+    "license": "MIT",
+    "tags": [
+      "example",
+      "demo"
+    ]
+  },
+  "documentation": {
+    "readmePath": "README.md"
+  },
+  "ui": {
+    "forms": {
+      "server": [
+        {
+          "title": "About This Plugin",
+          "description": "Hello World demonstrates how manifest-driven configuration renders in the admin UI. No secrets are required; the section simply documents what the plugin does.",
+          "fields": []
+        }
+      ],
+      "channel": []
+    }
+  },
+  "settingsDefaults": {
+    "server": {},
+    "channel": {}
+  }
 }
