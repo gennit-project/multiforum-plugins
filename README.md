@@ -77,6 +77,17 @@ npm run lint:manifests
 
 Run the validator before committing to ensure each manifest declares metadata, documentation paths, and UI configuration used by the admin screens.
 
+### Publishing checklist
+
+- Bump the `version` inside each plugin’s `plugin.json` **before** building.
+- Rebuild (`npm run build`) so the tarball bundles the updated manifest.
+- After uploading the bundle, sanity-check the embedded manifest:
+  ```bash
+  gsutil cat gs://<bucket>/plugins/<id>/<version>/plugin.json
+  ```
+  The `version` field must match the `<version>` you reference in `registry.json`. If they differ (for example, the manifest still says `0.2.0` but the registry lists `0.2.1`), the backend will skip the plugin when you run `refreshPlugins`.
+- Only regenerate `registry.json` once the manifest and registry versions are aligned.
+
 ## How Multiforum Uses These Plugins
 
 1. A Multiforum **admin points the server** at a plugin **registry** (JSON in GCS).
@@ -192,50 +203,23 @@ Multiforum uses this to list plugins and install a chosen `id@version`. During i
 If you want to test end-to-end before wiring CI:
 
 ```bash
-# Build plugins
-( cd plugins/security-attachment-scan && npm ci && npm run build )
-( cd plugins/hello-world && npm ci && npm run build )
+# 1. Build the plugins (dist outputs will be packaged)
+npm run build
 
-# Pack deterministic tarballs
-VERSION=0.1.0
-mkdir -p out
-for d in plugins/*; do
-  id=$(jq -r '.id' "$d/plugin.json")
-  stage="out/${id}-${VERSION}"
-  mkdir -p "$stage/dist"
-  cp "$d/plugin.json" "$stage/plugin.json"
-  cp -r "$d/dist/." "$stage/dist/"
-  tar --sort=name --owner=0 --group=0 --numeric-owner \
-      --mtime="@0" -czf "out/${id}-${VERSION}.tgz" -C "$stage" .
-  sha256sum "out/${id}-${VERSION}.tgz" | awk '{print $1}' > "out/${id}-${VERSION}.sha256"
-done
+# 2. Create deterministic bundles
+npm run bundle:create -- --version 0.2.1
 
-# Upload to GCS
+# 3. Generate registry.json (override bucket if needed)
+npm run registry:generate -- --version 0.2.1 --bucket gs://mf-plugins-prod --output registry.json
+
+# 4. Upload bundles + hashes + registry
 BUCKET=mf-plugins-prod
 for tgz in out/*.tgz; do
   base=$(basename "$tgz" .tgz)
   id="${base%-*}"
-  gsutil cp "$tgz" "gs://${BUCKET}/plugins/${id}/${VERSION}/bundle.tgz"
-  gsutil cp "out/${base}.sha256" "gs://${BUCKET}/plugins/${id}/${VERSION}/bundle.sha256"
+  gsutil cp "$tgz" "gs://${BUCKET}/plugins/${id}/0.2.1/bundle.tgz"
+  gsutil cp "out/${base}.sha256" "gs://${BUCKET}/plugins/${id}/0.2.1/bundle.sha256"
 done
-
-# Write a minimal registry.json
-cat > registry.json <<JSON
-{
-  "updatedAt": "$(date -Is)",
-  "plugins": [
-    {
-      "id": "security-attachment-scan",
-      "versions": [{ "version": "0.1.0", "tarballUrl": "gs://${BUCKET}/plugins/security-attachment-scan/0.1.0/bundle.tgz", "integritySha256": "$(cat out/security-attachment-scan-0.1.0.sha256)" }]
-    },
-    {
-      "id": "hello-world",
-      "versions": [{ "version": "0.1.0", "tarballUrl": "gs://${BUCKET}/plugins/hello-world/0.1.0/bundle.tgz", "integritySha256": "$(cat out/hello-world-0.1.0.sha256)" }]
-    }
-  ]
-}
-JSON
-
 gsutil cp registry.json "gs://${BUCKET}/registry.json"
 ```
 
