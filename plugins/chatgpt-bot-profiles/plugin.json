@@ -1,0 +1,170 @@
+{
+  "id": "chatgpt-bot-profiles",
+  "name": "ChatGPT Bot Profiles",
+  "version": "0.1.0",
+  "description": "Responds to /bot mentions with ChatGPT-powered replies and configurable profiles",
+  "entry": "dist/index.js",
+  "events": [
+    "comment.created"
+  ],
+  "secrets": [
+    {
+      "key": "OPENAI_API_KEY",
+      "scope": "server",
+      "required": true,
+      "description": "OpenAI API key used to generate bot replies",
+      "validationHint": "Provide a valid OpenAI API key (starts with sk-)."
+    }
+  ],
+  "metadata": {
+    "author": {
+      "name": "Multiforum Team",
+      "url": "https://github.com/listical/multiforum-plugins"
+    },
+    "homepage": "https://github.com/listical/multiforum-plugins/tree/main/plugins/chatgpt-bot-profiles",
+    "license": "MIT",
+    "tags": [
+      "chatgpt",
+      "bots",
+      "comments",
+      "ai"
+    ]
+  },
+  "documentation": {
+    "readmePath": "README.md"
+  },
+  "settingsDefaults": {
+    "server": {
+      "botName": "chatgpt-bot",
+      "model": "gpt-4o-mini",
+      "temperature": 0.7,
+      "maxTokens": 800,
+      "defaultProfileId": "general",
+      "profiles": [
+        {
+          "id": "general",
+          "displayName": "General Assistant",
+          "label": "General Assistant",
+          "prompt": "You are a helpful, concise assistant replying in a forum thread."
+        }
+      ],
+      "profilesJson": ""
+    },
+    "channel": {
+      "overrideProfiles": false,
+      "botName": "",
+      "defaultProfileId": "",
+      "profiles": [],
+      "profilesJson": ""
+    }
+  },
+  "ui": {
+    "forms": {
+      "server": [
+        {
+          "title": "OpenAI API",
+          "description": "Configure the OpenAI API key used by the bot.",
+          "fields": [
+            {
+              "type": "secret",
+              "key": "OPENAI_API_KEY",
+              "label": "OpenAI API Key",
+              "placeholder": "sk-...",
+              "required": true,
+              "helperText": "Store this key securely. It is only visible to server admins."
+            }
+          ]
+        },
+        {
+          "title": "Bot Behavior",
+          "description": "Set the bot handle, model, and response controls.",
+          "fields": [
+            {
+              "type": "text",
+              "key": "botName",
+              "label": "Bot handle",
+              "placeholder": "chatgpt-bot",
+              "helperText": "Mention format: /bot/<handle>. Example: /bot/chatgpt-bot"
+            },
+            {
+              "type": "text",
+              "key": "model",
+              "label": "Model",
+              "placeholder": "gpt-4o-mini"
+            },
+            {
+              "type": "number",
+              "key": "temperature",
+              "label": "Temperature",
+              "min": 0,
+              "max": 2,
+              "step": 0.1,
+              "default": 0.7
+            },
+            {
+              "type": "number",
+              "key": "maxTokens",
+              "label": "Max tokens",
+              "min": 64,
+              "max": 4000,
+              "step": 64,
+              "default": 800
+            },
+            {
+              "type": "text",
+              "key": "defaultProfileId",
+              "label": "Default profile id",
+              "placeholder": "general"
+            }
+          ]
+        },
+        {
+          "title": "Profiles (JSON)",
+          "description": "Provide a JSON array of profile objects with id, label (or displayName), and prompt. These profiles apply across all channels unless a channel override is enabled.",
+          "fields": [
+            {
+              "type": "textarea",
+              "key": "profilesJson",
+              "label": "Profiles JSON",
+              "placeholder": "[{\"id\":\"general\",\"label\":\"General Assistant\",\"prompt\":\"You are a helpful assistant.\"}]",
+              "helperText": "If empty, the default profile list in the manifest is used."
+            }
+          ]
+        }
+      ],
+      "channel": [
+        {
+          "title": "Channel Overrides",
+          "description": "Override the bot handle or profiles for this channel.",
+          "fields": [
+            {
+              "type": "boolean",
+              "key": "overrideProfiles",
+              "label": "Override profiles for this channel",
+              "default": false
+            },
+            {
+              "type": "text",
+              "key": "botName",
+              "label": "Bot handle (channel override)",
+              "placeholder": "chatgpt-bot"
+            },
+            {
+              "type": "text",
+              "key": "defaultProfileId",
+              "label": "Default profile id (channel override)",
+              "placeholder": "general"
+            },
+            {
+              "type": "textarea",
+              "key": "profilesJson",
+              "label": "Profiles JSON (channel override)",
+              "placeholder": "[{\"id\":\"general\",\"label\":\"General Assistant\",\"prompt\":\"You are a helpful assistant.\"}]",
+              "helperText": "Only used when overrideProfiles is enabled."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

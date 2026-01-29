@@ -1,0 +1,188 @@
+{
+  "id": "beta-reader-bot",
+  "name": "Beta Reader Bot",
+  "version": "0.1.0",
+  "description": "ChatGPT-powered beta reader with configurable creative writing feedback profiles",
+  "entry": "dist/index.js",
+  "events": [
+    "comment.created"
+  ],
+  "secrets": [
+    {
+      "key": "OPENAI_API_KEY",
+      "scope": "server",
+      "required": true,
+      "description": "OpenAI API key used to generate bot replies",
+      "validationHint": "Provide a valid OpenAI API key (starts with sk-)."
+    }
+  ],
+  "metadata": {
+    "author": {
+      "name": "Multiforum Team",
+      "url": "https://github.com/listical/multiforum-plugins"
+    },
+    "homepage": "https://github.com/listical/multiforum-plugins/tree/main/plugins/beta-reader-bot",
+    "license": "MIT",
+    "tags": [
+      "chatgpt",
+      "writing",
+      "feedback",
+      "bots"
+    ]
+  },
+  "documentation": {
+    "readmePath": "README.md"
+  },
+  "settingsDefaults": {
+    "server": {
+      "botName": "betabot",
+      "model": "gpt-4o-mini",
+      "temperature": 0.7,
+      "maxTokens": 900,
+      "defaultProfileId": "developmental-editor",
+      "profiles": [
+        {
+          "id": "developmental-editor",
+          "displayName": "Developmental Editor",
+          "label": "Developmental Editor",
+          "prompt": "You are a professional developmental editor providing chapter-level feedback.\\n\\nFocus on:\\n- Pacing and structure\\n- Character development and consistency\\n- Plot progression and tension\\n- Emotional beats and reader engagement\\n- Scene transitions\\n- Narrative arc within the chapter\\n\\nProvide:\\n- What's working well (be specific)\\n- Areas for improvement (with concrete suggestions)\\n- Questions to consider for revision\\n- Overall assessment of the chapter's effectiveness\\n\\nBe constructive, professional, and specific. Focus on big-picture storytelling elements rather than line-level details."
+        },
+        {
+          "id": "line-editor",
+          "displayName": "Line Editor",
+          "label": "Line Editor",
+          "prompt": "You are a line editor providing detailed, specific feedback on prose and craft.\\n\\nFocus on:\\n- Sentence-level clarity and flow\\n- Word choice and precision\\n- Show vs. tell\\n- Dialogue effectiveness\\n- Sensory details and imagery\\n- Repetition or awkward phrasing\\n- Prose rhythm and variety\\n\\nProvide:\\n- Specific examples from the text (quote short phrases)\\n- Concrete suggestions for improvement\\n- Patterns you notice (good or bad)\\n- Line-level craft observations\\n\\nBe specific and quote examples. Focus on the craft of writing at the sentence and paragraph level."
+        },
+        {
+          "id": "thriller-fan",
+          "displayName": "Thriller Fan",
+          "label": "Thriller Fan",
+          "prompt": "You are an engaged reader who loves when fantasy and sci-fi stories embrace darker, more visceral moments -- someone who appreciates horror-thriller elements woven into speculative fiction. You are attuned to opportunities for dread, body horror, psychological tension, and genuine fear for characters' safety. You love when magical or technological procedures feel dangerous and uncertain, when power comes at a visible cost, and when characters face moments of real vulnerability where survival is not guaranteed. As you read, give feedback in 2-5 short paragraphs like someone who is invested in the story but alert to missed opportunities for intensity. Not every scene needs to be scary, but when a moment has potential for dread, unease, or high-stakes tension -- a dangerous ritual, a body-altering procedure, a morally gray character holding power over the protagonists, a moment where things could go catastrophically wrong -- point it out if that potential is not fully realized. Note where scenes feel too safe or controlled when they should feel precarious. Highlight effective moments of tension or unease, but push for more when the setup is there: more sensory discomfort, more uncertainty about whether characters will survive intact, more lingering on the visceral or disturbing implications of what is happening. You want to feel characters' fear and doubt when the situation warrants it. Be enthusiastic and engaged, but advocate for higher stakes and darker turns when the story opens that door."
+        },
+        {
+          "id": "character-driven-fantasy-fan",
+          "displayName": "Character Driven Fantasy Fan",
+          "label": "Character Driven Fantasy Fan",
+          "prompt": "You are a perceptive, collaborative reader giving feedback on a fantasy novel chapter written in a style that emphasizes real-time immersion, emotional precision, and character-driven tension. The story uses tight limited third-person POV, vivid but economical sensory detail, and dialogue as the main vehicle for world-building and emotion. Scenes begin at moments of emotional charge and end on impact. Descriptions should feel beautiful, uncanny, or mythic, but always filtered through the character's perception -- never as summary. As you read, please give feedback in 2-5 short paragraphs like a dedicated fan who is also a good critic. Focus on whether the pacing, emotional flow, and sensory atmosphere feel alive; whether dialogue sounds natural yet purposeful; and whether subtext or tension could be sharpened. Point out any parts that broke immersion or felt too expositional. Highlight lines that worked beautifully or images that lingered. You may speculate or express hopes for what happens next -- warmth and engagement are welcome. Do not comment on grammar, cliche, or writing rules. Treat this as a literary, character-driven fantasy that values tone, feeling, and forward movement over strict exposition."
+        }
+      ],
+      "profilesJson": ""
+    },
+    "channel": {
+      "overrideProfiles": false,
+      "botName": "",
+      "defaultProfileId": "",
+      "profiles": [],
+      "profilesJson": ""
+    }
+  },
+  "ui": {
+    "forms": {
+      "server": [
+        {
+          "title": "OpenAI API",
+          "description": "Configure the OpenAI API key used by the bot.",
+          "fields": [
+            {
+              "type": "secret",
+              "key": "OPENAI_API_KEY",
+              "label": "OpenAI API Key",
+              "placeholder": "sk-...",
+              "required": true,
+              "helperText": "Store this key securely. It is only visible to server admins."
+            }
+          ]
+        },
+        {
+          "title": "Bot Behavior",
+          "description": "Set the bot handle, model, and response controls.",
+          "fields": [
+            {
+              "type": "text",
+              "key": "botName",
+              "label": "Bot handle",
+              "placeholder": "betabot",
+              "helperText": "Mention format: /bot/<handle>. Example: /bot/betabot"
+            },
+            {
+              "type": "text",
+              "key": "model",
+              "label": "Model",
+              "placeholder": "gpt-4o-mini"
+            },
+            {
+              "type": "number",
+              "key": "temperature",
+              "label": "Temperature",
+              "min": 0,
+              "max": 2,
+              "step": 0.1,
+              "default": 0.7
+            },
+            {
+              "type": "number",
+              "key": "maxTokens",
+              "label": "Max tokens",
+              "min": 128,
+              "max": 4000,
+              "step": 64,
+              "default": 900
+            },
+            {
+              "type": "text",
+              "key": "defaultProfileId",
+              "label": "Default profile id",
+              "placeholder": "developmental-editor"
+            }
+          ]
+        },
+        {
+          "title": "Profiles (JSON)",
+          "description": "Provide a JSON array of profile objects with id, label (or displayName), and prompt. These profiles apply across all channels unless a channel override is enabled.",
+          "fields": [
+            {
+              "type": "textarea",
+              "key": "profilesJson",
+              "label": "Profiles JSON",
+              "placeholder": "[{\"id\":\"developmental-editor\",\"label\":\"Developmental Editor\",\"prompt\":\"You are a professional developmental editor...\"}]",
+              "helperText": "If empty, the default profiles bundled with the plugin are used."
+            }
+          ]
+        }
+      ],
+      "channel": [
+        {
+          "title": "Channel Overrides",
+          "description": "Override the bot handle or profiles for this channel.",
+          "fields": [
+            {
+              "type": "boolean",
+              "key": "overrideProfiles",
+              "label": "Override profiles for this channel",
+              "default": false
+            },
+            {
+              "type": "text",
+              "key": "botName",
+              "label": "Bot handle (channel override)",
+              "placeholder": "betabot"
+            },
+            {
+              "type": "text",
+              "key": "defaultProfileId",
+              "label": "Default profile id (channel override)",
+              "placeholder": "developmental-editor"
+            },
+            {
+              "type": "textarea",
+              "key": "profilesJson",
+              "label": "Profiles JSON (channel override)",
+              "placeholder": "[{\"id\":\"developmental-editor\",\"label\":\"Developmental Editor\",\"prompt\":\"You are a professional developmental editor...\"}]",
+              "helperText": "Only used when overrideProfiles is enabled."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

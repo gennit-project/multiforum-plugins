@@ -64,6 +64,7 @@ See the "Local / Manual Publish" section in README.md for step-by-step commands 
 ## Plugin Events
 
 Current supported events:
+- `comment.created`
 - `downloadableFile.created`
 - `downloadableFile.updated`
 

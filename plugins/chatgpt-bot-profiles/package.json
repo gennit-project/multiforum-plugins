@@ -1,0 +1,17 @@
+{
+  "name": "chatgpt-bot-profiles",
+  "version": "0.1.0",
+  "description": "ChatGPT-powered bot profiles for Multiforum comments",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc index.ts --outDir dist --target ES2020 --module CommonJS --moduleResolution node --esModuleInterop --skipLibCheck --resolveJsonModule",
+    "clean": "rm -rf dist && mkdir -p dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

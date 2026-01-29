@@ -4,12 +4,10 @@
   "description": "Multiforum official plugins repository",
   "private": true,
   "scripts": {
-    "build": "npm run build:security-attachment-scan && npm run build:hello-world",
-    "build:security-attachment-scan": "cd plugins/security-attachment-scan && npm run build",
-    "build:hello-world": "cd plugins/hello-world && npm run build",
-    "install:all": "npm run install:security-attachment-scan && npm run install:hello-world",
-    "install:security-attachment-scan": "cd plugins/security-attachment-scan && npm install",
-    "install:hello-world": "cd plugins/hello-world && npm install",
+    "build:plugin": "node scripts/run-plugin-script.mjs build",
+    "install:plugin": "node scripts/run-plugin-script.mjs install",
+    "build": "node scripts/run-plugin-script.mjs build --plugin security-attachment-scan && node scripts/run-plugin-script.mjs build --plugin hello-world && node scripts/run-plugin-script.mjs build --plugin chatgpt-bot-profiles && node scripts/run-plugin-script.mjs build --plugin beta-reader-bot",
+    "install:all": "node scripts/run-plugin-script.mjs install --plugin security-attachment-scan && node scripts/run-plugin-script.mjs install --plugin hello-world && node scripts/run-plugin-script.mjs install --plugin chatgpt-bot-profiles && node scripts/run-plugin-script.mjs install --plugin beta-reader-bot",
     "lint:manifests": "node scripts/validate-manifests.mjs",
     "bundle:create": "node scripts/create-bundles.mjs",
     "registry:generate": "node scripts/generate-registry.mjs"

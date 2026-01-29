@@ -7,9 +7,9 @@ Docs are split by audience:
 - Server admins: `SERVER_ADMIN_GUIDE.md`
 - Plugin developers: `PLUGIN_DEVELOPER_GUIDE.md`
 
-Plugins in this repo demonstrate how to extend Multiforum using **hooks** that run when a comment or discussion is created.
+Plugins in this repo demonstrate how to extend Multiforum using **hooks** that run when content is created or updated (comments, downloadable files, and more).
 
-At this stage, the repo contains two example plugins:
+At this stage, the repo contains four example plugins:
 
 - **Security: Attachment Scan**  
   A server-scoped plugin that scans uploaded attachments against the [VirusTotal API](https://www.virustotal.com/).  
@@ -17,7 +17,15 @@ At this stage, the repo contains two example plugins:
 
 - **Hello World**  
   A simple channel-scoped plugin that proves execution works at the forum level.  
-  When enabled, it logs a message each time a discussion is created.
+  When enabled, it logs a message each time a file attachment event is triggered.
+
+- **ChatGPT Bot Profiles**  
+  A channel-scoped plugin that responds to `/bot/<handle>` mentions in comments with configurable ChatGPT profiles.  
+  Requires a secret (`OPENAI_API_KEY`) to be configured by the site admin.
+
+- **Beta Reader Bot**  
+  A channel-scoped plugin that responds to `/bot/betabot` mentions with creative writing feedback profiles.  
+  Requires a secret (`OPENAI_API_KEY`) to be configured by the site admin.
 
 ---
 
@@ -25,7 +33,7 @@ At this stage, the repo contains two example plugins:
 
 - Each plugin has its own folder under `plugins/`.
 - `plugin.json` declares the plugin manifest (id, name, version, entry file, required events, secrets).
-- `src/` contains TypeScript source.
+- TypeScript source lives alongside `plugin.json` (for example, `index.ts`).
 - `dist/` contains compiled JavaScript for execution (the entry point listed in `plugin.json`).
 
 ---
@@ -38,10 +46,10 @@ At this stage, the repo contains two example plugins:
   "name": "Security: Attachment Scan",
   "version": "0.1.0",
   "entry": "dist/index.js",
-  "events": ["comment.created", "discussion.created"],
-  "secrets": {
-    "VIRUS_TOTAL_API_KEY": { "scope": "server", "required": true }
-  }
+  "events": ["comment.created"],
+  "secrets": [
+    { "key": "OPENAI_API_KEY", "scope": "server", "required": true }
+  ]
 }
 ````
 
@@ -60,18 +68,28 @@ At this stage, the repo contains two example plugins:
 From the repo root:
 
 ```bash
-# Security Scan
-cd plugins/security-attachment-scan
-npm install
-npm run build
+# Install deps for a single plugin
+npm run install:plugin -- --plugin hello-world
 
-# Hello World
-cd ../hello-world
-npm install
-npm run build
+# Build a single plugin
+npm run build:plugin -- --plugin hello-world
 ```
 
 This generates `dist/index.js` referenced by each manifest.
+
+### Plugin-scoped install/build helpers (pnpm)
+
+These scripts run per-plugin installs/builds using pnpm workspaces:
+
+```bash
+# Install dependencies for one plugin
+npm run install:plugin -- --plugin <id>
+
+# Build one plugin
+npm run build:plugin -- --plugin <id>
+```
+
+You can still build everything with `npm run build`, which runs each plugin build in sequence.
 
 ### Manifest validation
 
@@ -248,12 +266,18 @@ gsutil cp registry.json "gs://${BUCKET}/registry.json"
 
 1. Create `plugins/<your-plugin>/`.
 2. Add a `plugin.json` with `id`, `name`, `version`, `entry`, `events`.
-3. Implement `src/index.ts` exporting a default async function:
+3. Implement `index.ts` exporting a default class with `handleEvent`:
 
 ```ts
-export default async function(ctx, event) {
-  ctx.log("Hello from", ctx.scope, ctx.channelId);
-  // do work, e.g., ctx.storeFlag(...)
+export default class MyPlugin {
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
+
+  async handleEvent(event) {
+    this.ctx.log("Hello from", this.ctx.scope, this.ctx.channelId);
+    // do work, e.g., this.ctx.storeFlag(...)
+  }
 }
 ```
 
