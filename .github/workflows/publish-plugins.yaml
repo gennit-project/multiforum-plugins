@@ -3,7 +3,7 @@ name: Publish Plugins
 on:
   push:
     tags:
-      - 'v*'  # e.g., v0.1.0
+      - '*@*'  # e.g., hello-world@0.2.2
 
 jobs:
   build-and-upload:
@@ -31,85 +31,77 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Install deps & build all plugins
+      - name: Parse tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          PLUGIN_ID="${TAG%@*}"
+          VERSION="${TAG#*@}"
+          if [ -z "$PLUGIN_ID" ] || [ -z "$VERSION" ] || [ "$PLUGIN_ID" = "$VERSION" ]; then
+            echo "Invalid tag format: $TAG (expected <plugin-id>@<version>)" >&2
+            exit 1
+          fi
+          echo "PLUGIN_ID=$PLUGIN_ID" >> "$GITHUB_ENV"
+          echo "PLUGIN_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install deps & build plugin
         run: |
           set -euo pipefail
           # Install root dependencies first (includes TypeScript)
           npm ci
-          
-          # Then install and build each plugin
-          for d in plugins/*; do
-            if [ -f "$d/package.json" ]; then
-              (cd "$d" && npm ci && npm run build)
-            fi
-          done
+
+          PLUGIN_DIR="plugins/${PLUGIN_ID}"
+          if [ ! -d "$PLUGIN_DIR" ] || [ ! -f "$PLUGIN_DIR/plugin.json" ]; then
+            echo "Plugin ${PLUGIN_ID} not found under $PLUGIN_DIR" >&2
+            exit 1
+          fi
+
+          MANIFEST_VERSION=$(jq -r '.version' "$PLUGIN_DIR/plugin.json")
+          if [ -z "$MANIFEST_VERSION" ] || [ "$MANIFEST_VERSION" = "null" ]; then
+            echo "Missing version in $PLUGIN_DIR/plugin.json" >&2
+            exit 1
+          fi
+          if [ "$MANIFEST_VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "Tag version $PLUGIN_VERSION does not match manifest $MANIFEST_VERSION for $PLUGIN_ID" >&2
+            exit 1
+          fi
+
+          if [ -f "$PLUGIN_DIR/package.json" ]; then
+            (cd "$PLUGIN_DIR" && npm ci && npm run build)
+          fi
 
       - name: Pack deterministic tarballs and compute sha256
         run: |
           set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y tar coreutils jq
-          VERSION="${GITHUB_REF_NAME#v}"   # v0.1.0 -> 0.1.0
-          TS=0                             # normalize mtime
-          mkdir -p out
-
-          for d in plugins/*; do
-            [ -f "$d/plugin.json" ] || continue
-            ID=$(jq -r '.id' "$d/plugin.json")
-            # Stage minimal contents
-            STAGE="out/${ID}-${VERSION}"
-            mkdir -p "$STAGE/dist"
-            cp "$d/plugin.json" "$STAGE/plugin.json"
-            if [ ! -f "$d/dist/index.js" ]; then
-              echo "Missing dist/index.js in $d" >&2; exit 1
-            fi
-            cp -r "$d/dist/." "$STAGE/dist/"
-
-            # Create deterministic tarball
-            tar --sort=name --owner=0 --group=0 --numeric-owner \
-                --mtime="@${TS}" -czf "out/${ID}-${VERSION}.tgz" -C "$STAGE" .
-            sha256sum "out/${ID}-${VERSION}.tgz" | awk '{print $1}' > "out/${ID}-${VERSION}.sha256"
-          done
+          npm run bundle:create -- --plugin "${PLUGIN_ID}"
 
       - name: Upload tarballs to GCS
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          for tgz in out/*.tgz; do
-            base=$(basename "$tgz" .tgz)     # id-version
-            id="${base%-*}"
-            sha_file="out/${base}.sha256"
-            gcloud storage cp "$tgz"       "gs://${GCS_BUCKET}/${GCP_UPLOAD_PREFIX}/${id}/${VERSION}/bundle.tgz"
-            gcloud storage cp "$sha_file"  "gs://${GCS_BUCKET}/${GCP_UPLOAD_PREFIX}/${id}/${VERSION}/bundle.sha256"
+          TGZ="out/${PLUGIN_ID}-${PLUGIN_VERSION}.tgz"
+          SHA_FILE="out/${PLUGIN_ID}-${PLUGIN_VERSION}.sha256"
+          if [ ! -f "$TGZ" ] || [ ! -f "$SHA_FILE" ]; then
+            echo "Missing bundle or hash for ${PLUGIN_ID}@${PLUGIN_VERSION}" >&2
+            exit 1
+          fi
 
-            # Convenience: upload a copy of plugin.json next to the tarball
-            TMPDIR=$(mktemp -d)
-            tar -xzf "$tgz" -C "$TMPDIR"
-            gcloud storage cp "${TMPDIR}/plugin.json" "gs://${GCS_BUCKET}/${GCP_UPLOAD_PREFIX}/${id}/${VERSION}/plugin.json"
-          done
+          gcloud storage cp "$TGZ"      "gs://${GCS_BUCKET}/${GCP_UPLOAD_PREFIX}/${PLUGIN_ID}/${PLUGIN_VERSION}/bundle.tgz"
+          gcloud storage cp "$SHA_FILE" "gs://${GCS_BUCKET}/${GCP_UPLOAD_PREFIX}/${PLUGIN_ID}/${PLUGIN_VERSION}/bundle.sha256"
+
+          # Convenience: upload a copy of plugin.json next to the tarball
+          TMPDIR=$(mktemp -d)
+          tar -xzf "$TGZ" -C "$TMPDIR"
+          gcloud storage cp "${TMPDIR}/plugin.json" "gs://${GCS_BUCKET}/${GCP_UPLOAD_PREFIX}/${PLUGIN_ID}/${PLUGIN_VERSION}/plugin.json"
 
       - name: Generate registry.json and upload
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          # Fetch existing registry if present (merge in place)
+          gcloud storage cp "gs://${GCS_BUCKET}/${REGISTRY_OBJECT}" registry.json || true
 
-          # Build array entries for each plugin we just uploaded
-          arr="[]"
-          for tgz in out/*.tgz; do
-            base=$(basename "$tgz" .tgz)
-            id="${base%-*}"
-            sha=$(cat "out/${base}.sha256")
-            entry=$(jq -n --arg id "$id" --arg v "$VERSION" --arg sha "$sha" --arg bucket "$GCS_BUCKET" '{
-              id: $id,
-              versions: [{
-                version: $v,
-                tarballUrl: ("gs://" + $bucket + "/plugins/" + $id + "/" + $v + "/bundle.tgz"),
-                integritySha256: $sha
-              }]
-            }')
-            arr=$(jq --argjson e "$entry" '. + [$e]' <<<"$arr")
-          done
+          npm run registry:generate -- \
+            --plugin "${PLUGIN_ID}" \
+            --bucket "gs://${GCS_BUCKET}" \
+            --output registry.json
 
-          jq -n --arg now "$(date -Is)" --argjson plugins "$arr" \
-            '{ updatedAt: $now, plugins: $plugins }' > registry.json
-
-          gcloud storage cp registry.json "gs://${GCS_BUCKET}/registry.json"
+          gcloud storage cp registry.json "gs://${GCS_BUCKET}/${REGISTRY_OBJECT}"

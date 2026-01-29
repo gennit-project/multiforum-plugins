@@ -12,18 +12,13 @@ const outRoot = path.join(repoRoot, 'out');
 
 const parseArgs = () => {
   const args = process.argv.slice(2);
-  let version = process.env.VERSION || '';
   let bucket = process.env.BUCKET || 'gs://mf-plugins-prod';
   let outputPath = path.join(repoRoot, 'registry.json');
+  const plugins = new Set();
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
-    if (arg === '--version' && args[i + 1]) {
-      version = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--version=')) {
-      version = arg.split('=')[1];
-    } else if (arg === '--bucket' && args[i + 1]) {
+    if (arg === '--bucket' && args[i + 1]) {
       bucket = args[i + 1];
       i += 1;
     } else if (arg.startsWith('--bucket=')) {
@@ -33,17 +28,15 @@ const parseArgs = () => {
       i += 1;
     } else if (arg.startsWith('--output=')) {
       outputPath = path.resolve(arg.split('=')[1]);
+    } else if (arg === '--plugin' && args[i + 1]) {
+      plugins.add(args[i + 1]);
+      i += 1;
+    } else if (arg.startsWith('--plugin=')) {
+      plugins.add(arg.split('=')[1]);
     }
   }
 
-  if (!version) {
-    console.error(
-      'Error: Please supply a version via --version <value> or the VERSION env variable.'
-    );
-    process.exit(1);
-  }
-
-  return { version, bucket, outputPath };
+  return { bucket, outputPath, plugins: Array.from(plugins) };
 };
 
 const bucketUrlFor = (bucket, id, version) => {
@@ -52,17 +45,20 @@ const bucketUrlFor = (bucket, id, version) => {
 };
 
 const main = async () => {
-  const { version, bucket, outputPath } = parseArgs();
+  const { bucket, outputPath, plugins } = parseArgs();
 
   const entries = await fs.readdir(pluginsRoot, { withFileTypes: true });
-  const pluginDirs = entries.filter((entry) => entry.isDirectory());
+  let pluginDirs = entries.filter((entry) => entry.isDirectory());
+  if (plugins.length > 0) {
+    pluginDirs = pluginDirs.filter((entry) => plugins.includes(entry.name));
+  }
 
   if (pluginDirs.length === 0) {
     console.error('No plugin directories found under ./plugins.');
     process.exit(1);
   }
 
-  const plugins = [];
+  const pluginEntries = [];
 
   for (const dirent of pluginDirs) {
     const pluginPath = path.join(pluginsRoot, dirent.name);
@@ -74,35 +70,69 @@ const main = async () => {
       throw new Error(`plugin.json in ${dirent.name} is missing an "id".`);
     }
 
-    const tarballPath = path.join(outRoot, `${manifest.id}-${version}.tgz`);
-    const hashPath = path.join(outRoot, `${manifest.id}-${version}.sha256`);
+    if (!manifest.version) {
+      throw new Error(`plugin.json in ${dirent.name} is missing a "version".`);
+    }
+
+    const pluginVersion = manifest.version;
+    const tarballPath = path.join(outRoot, `${manifest.id}-${pluginVersion}.tgz`);
+    const hashPath = path.join(outRoot, `${manifest.id}-${pluginVersion}.sha256`);
 
     try {
       await fs.access(tarballPath);
       await fs.access(hashPath);
     } catch {
       throw new Error(
-        `Missing bundle or hash for ${manifest.id}. Did you run "npm run bundle:create -- --version ${version}"?`
+        `Missing bundle or hash for ${manifest.id}. Did you run "npm run bundle:create -- --plugin ${manifest.id}"?`
       );
     }
 
     const integritySha256 = (await fs.readFile(hashPath, 'utf8')).trim();
 
-    plugins.push({
+    pluginEntries.push({
       id: manifest.id,
       versions: [
         {
-          version,
-          tarballUrl: bucketUrlFor(bucket, manifest.id, version),
+          version: pluginVersion,
+          tarballUrl: bucketUrlFor(bucket, manifest.id, pluginVersion),
           integritySha256,
         },
       ],
     });
   }
 
+  let existingRegistry = { updatedAt: '', plugins: [] };
+  try {
+    const existingRaw = await fs.readFile(outputPath, 'utf8');
+    existingRegistry = JSON.parse(existingRaw);
+  } catch {
+    // OK if registry does not exist yet
+  }
+
+  const merged = new Map();
+  for (const entry of existingRegistry.plugins || []) {
+    if (entry?.id) {
+      merged.set(entry.id, { id: entry.id, versions: entry.versions || [] });
+    }
+  }
+
+  for (const entry of pluginEntries) {
+    const current = merged.get(entry.id) || { id: entry.id, versions: [] };
+    const nextVersion = entry.versions[0];
+    const existingIndex = current.versions.findIndex(
+      (item) => item.version === nextVersion.version
+    );
+    if (existingIndex >= 0) {
+      current.versions[existingIndex] = nextVersion;
+    } else {
+      current.versions.push(nextVersion);
+    }
+    merged.set(entry.id, current);
+  }
+
   const registry = {
     updatedAt: new Date().toISOString(),
-    plugins,
+    plugins: Array.from(merged.values()),
   };
 
   await fs.writeFile(

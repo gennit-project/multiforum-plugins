@@ -3,6 +3,10 @@
 
 This repository contains demo plugins for the Multiforum platform.
 
+Docs are split by audience:
+- Server admins: `SERVER_ADMIN_GUIDE.md`
+- Plugin developers: `PLUGIN_DEVELOPER_GUIDE.md`
+
 Plugins in this repo demonstrate how to extend Multiforum using **hooks** that run when a comment or discussion is created.
 
 At this stage, the repo contains two example plugins:
@@ -77,16 +81,21 @@ npm run lint:manifests
 
 Run the validator before committing to ensure each manifest declares metadata, documentation paths, and UI configuration used by the admin screens.
 
-### Publishing checklist
+### Local packaging helpers
 
-- Bump the `version` inside each plugin’s `plugin.json` **before** building.
-- Rebuild (`npm run build`) so the tarball bundles the updated manifest.
+- `npm run bundle:create -- --plugin <id>` bundles a single plugin using its manifest version.
+- `npm run registry:generate -- --plugin <id>` merges that plugin version into `registry.json`.
+
+### Publishing checklist (plugin-scoped releases)
+
+- Bump the `version` inside the plugin’s `plugin.json` **before** building.
+- Build only the plugin you are releasing so the tarball bundles the updated manifest.
 - After uploading the bundle, sanity-check the embedded manifest:
   ```bash
   gsutil cat gs://<bucket>/plugins/<id>/<version>/plugin.json
   ```
-  The `version` field must match the `<version>` you reference in `registry.json`. If they differ (for example, the manifest still says `0.2.0` but the registry lists `0.2.1`), the backend will skip the plugin when you run `refreshPlugins`.
-- Only regenerate `registry.json` once the manifest and registry versions are aligned.
+  The manifest version is the source of truth. The `version` field must match the `<version>` directory and the version entry in `registry.json`. If they differ (for example, the manifest still says `0.2.0` but the registry lists `0.2.1`), installs fail and `refreshPlugins` creates mismatched version records.
+- Update `registry.json` by **merging** the new version into existing entries (do not overwrite other plugins or older versions).
 
 ## How Multiforum Uses These Plugins
 
@@ -104,7 +113,8 @@ Run the validator before committing to ensure each manifest declares metadata, d
 
 ## CI/CD: GitHub → GCS → Multiforum
 
-This repo publishes **deterministic tarballs** per plugin+version to **Google Cloud Storage (GCS)** on **tag pushes**. Multiforum reads a `registry.json` in the bucket to list what’s available.
+This repo publishes **deterministic tarballs** per plugin+version to **Google Cloud Storage (GCS)** using **plugin-scoped releases**. Multiforum reads a `registry.json` in the bucket to list what’s available.
+This documentation assumes the publishing scripts/CI have been updated to support per-plugin builds and registry merging.
 
 ### GCS layout (private bucket)
 
@@ -143,11 +153,15 @@ dist/index.js
 
 We make tarballs **deterministic** so their SHA256 hash is stable (sort entries, zero timestamps, numeric owners).
 
-### Versioning convention
+### Versioning convention (plugin-scoped)
 
-* Push a tag like `v0.1.0` to this repo.
-* CI builds each plugin, creates a `bundle.tgz` for that version, computes `sha256`,
-  uploads to GCS, and updates `registry.json`.
+* The **plugin manifest version** (`plugin.json.version`) is the source of truth.
+* Release a single plugin at a time:
+  - Recommended tag format: `<plugin-id>@<version>` (e.g. `hello-world@0.2.2`).
+  - CI validates that the tag version matches `plugin.json.version`.
+* CI builds only the tagged plugin, uploads its tarball to:
+  `gs://<bucket>/plugins/<id>/<version>/bundle.tgz`
+* CI then **merges** the new version into `registry.json` instead of overwriting it.
 
 ### Access control
 
@@ -174,8 +188,8 @@ The `registry.json` object uploaded by CI looks like:
       "id": "security-attachment-scan",
       "versions": [
         {
-          "version": "0.1.0",
-          "tarballUrl": "gs://mf-plugins-prod/plugins/security-attachment-scan/0.1.0/bundle.tgz",
+          "version": "0.2.1",
+          "tarballUrl": "gs://mf-plugins-prod/plugins/security-attachment-scan/0.2.1/bundle.tgz",
           "integritySha256": "e3b0c44298fc1c149afbf4c8996fb924..."
         }
       ]
@@ -184,8 +198,8 @@ The `registry.json` object uploaded by CI looks like:
       "id": "hello-world",
       "versions": [
         {
-          "version": "0.1.0",
-          "tarballUrl": "gs://mf-plugins-prod/plugins/hello-world/0.1.0/bundle.tgz",
+          "version": "0.2.2",
+          "tarballUrl": "gs://mf-plugins-prod/plugins/hello-world/0.2.2/bundle.tgz",
           "integritySha256": "ab12cd34ef56..."
         }
       ]
@@ -196,30 +210,35 @@ The `registry.json` object uploaded by CI looks like:
 
 Multiforum uses this to list plugins and install a chosen `id@version`. During install, the server downloads the tarball from GCS, **verifies** the SHA256, and records the GCS URL + hash in its database. Workers fetch the tarball by `gs://` path at runtime, verify again, extract, and run `dist/index.js`.
 
+Notes:
+- Registries should preserve older versions when new ones are published.
+- Multiple registries are supported; each registry can host any subset of plugins.
+
 ---
 
 ## Local / Manual Publish (without CI)
 
-If you want to test end-to-end before wiring CI:
+If you want to test end-to-end before wiring CI, publish **one plugin at a time**:
 
 ```bash
-# 1. Build the plugins (dist outputs will be packaged)
+# 1. Build the plugin (dist outputs will be packaged)
+cd plugins/hello-world
+npm install
 npm run build
 
-# 2. Create deterministic bundles
-npm run bundle:create -- --version 0.2.1
+# 2. Create deterministic bundle for this plugin's manifest version
+# (example assumes plugin.json.version = 0.2.2)
+cd ../..
+npm run bundle:create -- --plugin hello-world
 
-# 3. Generate registry.json (override bucket if needed)
-npm run registry:generate -- --version 0.2.1 --bucket gs://mf-plugins-prod --output registry.json
+# 3. Merge registry.json (override bucket if needed)
+npm run registry:generate -- --plugin hello-world --bucket gs://mf-plugins-prod --output registry.json
 
-# 4. Upload bundles + hashes + registry
+# 4. Upload bundle + hash + merged registry
 BUCKET=mf-plugins-prod
-for tgz in out/*.tgz; do
-  base=$(basename "$tgz" .tgz)
-  id="${base%-*}"
-  gsutil cp "$tgz" "gs://${BUCKET}/plugins/${id}/0.2.1/bundle.tgz"
-  gsutil cp "out/${base}.sha256" "gs://${BUCKET}/plugins/${id}/0.2.1/bundle.sha256"
-done
+VERSION=0.2.2
+gsutil cp "out/hello-world-${VERSION}.tgz" "gs://${BUCKET}/plugins/hello-world/${VERSION}/bundle.tgz"
+gsutil cp "out/hello-world-${VERSION}.sha256" "gs://${BUCKET}/plugins/hello-world/${VERSION}/bundle.sha256"
 gsutil cp registry.json "gs://${BUCKET}/registry.json"
 ```
 
@@ -240,7 +259,7 @@ export default async function(ctx, event) {
 
 4. Compile to `dist/index.js`.
 5. Commit both `plugin.json` and `dist/`.
-6. Tag a release (e.g., `v0.1.1`) to trigger CI → publish to GCS.
+6. Tag a release (e.g., `hello-world@0.2.2`) to trigger CI → publish to GCS.
 
 ---
 

@@ -15,6 +15,7 @@ const outRoot = path.join(repoRoot, 'out');
 const parseArgs = () => {
   const args = process.argv.slice(2);
   let version = process.env.VERSION || '';
+  const plugins = new Set();
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -23,17 +24,15 @@ const parseArgs = () => {
       i += 1;
     } else if (arg.startsWith('--version=')) {
       version = arg.split('=')[1];
+    } else if (arg === '--plugin' && args[i + 1]) {
+      plugins.add(args[i + 1]);
+      i += 1;
+    } else if (arg.startsWith('--plugin=')) {
+      plugins.add(arg.split('=')[1]);
     }
   }
 
-  if (!version) {
-    console.error(
-      'Error: Please supply a version via --version <value> or the VERSION env variable.'
-    );
-    process.exit(1);
-  }
-
-  return { version };
+  return { version, plugins: Array.from(plugins) };
 };
 
 const ensureDir = async (dir) => {
@@ -92,19 +91,24 @@ const sha256File = async (filePath) => {
 };
 
 const main = async () => {
-  const { version } = parseArgs();
+  const { version, plugins } = parseArgs();
 
   await ensureDir(outRoot);
 
   const entries = await fs.readdir(pluginsRoot, { withFileTypes: true });
-  const pluginDirs = entries.filter((entry) => entry.isDirectory());
+  let pluginDirs = entries.filter((entry) => entry.isDirectory());
+  if (plugins.length > 0) {
+    pluginDirs = pluginDirs.filter((entry) => plugins.includes(entry.name));
+  }
 
   if (pluginDirs.length === 0) {
     console.error('No plugin directories found under ./plugins.');
     process.exit(1);
   }
 
-  console.log(`Creating bundles for version ${version}…`);
+  console.log(
+    `Creating bundles${version ? ` for version ${version}` : ''}…`
+  );
 
   for (const dirent of pluginDirs) {
     const pluginPath = path.join(pluginsRoot, dirent.name);
@@ -118,11 +122,17 @@ const main = async () => {
       throw new Error(`plugin.json in ${dirent.name} is missing an "id".`);
     }
 
-    if (manifest.version !== version) {
+    if (!manifest.version) {
+      throw new Error(`plugin.json in ${dirent.name} is missing a "version".`);
+    }
+
+    if (version && manifest.version !== version) {
       throw new Error(
         `Version mismatch for ${manifest.id}: manifest=${manifest.version}, requested=${version}.`
       );
     }
+
+    const pluginVersion = manifest.version;
 
     try {
       await fs.access(distPath);
@@ -132,7 +142,7 @@ const main = async () => {
       );
     }
 
-    const stageDir = path.join(outRoot, `${manifest.id}-${version}`);
+    const stageDir = path.join(outRoot, `${manifest.id}-${pluginVersion}`);
     await fs.rm(stageDir, { recursive: true, force: true });
     await ensureDir(stageDir);
 
@@ -140,14 +150,14 @@ const main = async () => {
     await fs.copyFile(manifestPath, path.join(stageDir, 'plugin.json'));
     await copyRecursive(distPath, path.join(stageDir, 'dist'));
 
-    const tarballPath = path.join(outRoot, `${manifest.id}-${version}.tgz`);
+    const tarballPath = path.join(outRoot, `${manifest.id}-${pluginVersion}.tgz`);
 
     console.log(`• Packaging ${manifest.id} → ${tarballPath}`);
     runTar(stageDir, tarballPath);
 
     const digest = await sha256File(tarballPath);
     await fs.writeFile(
-      path.join(outRoot, `${manifest.id}-${version}.sha256`),
+      path.join(outRoot, `${manifest.id}-${pluginVersion}.sha256`),
       `${digest}\n`,
       'utf8'
     );
