@@ -1,7 +1,7 @@
 {
   "id": "chatgpt-bot-profiles",
   "name": "ChatGPT Bot Profiles",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Responds to /bot mentions with ChatGPT-powered replies and configurable profiles",
   "entry": "dist/index.js",
   "events": [
@@ -25,7 +25,7 @@
     "license": "MIT",
     "tags": [
       "chatgpt",
-      "bots",
+      "bot",
       "comments",
       "ai"
     ]

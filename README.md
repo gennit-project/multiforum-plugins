@@ -127,6 +127,35 @@ Run the validator before committing to ensure each manifest declares metadata, d
    * Channel-enabled plugins run (e.g., Hello World).
 6. Results are visible in a Pipelines panel: each check (plugin) shows success/failure and logs.
 
+### Bot plugins (tagged `bot`)
+
+Plugins with the `bot` tag create and maintain bot users when they are **enabled at the channel scope**. The backend will:
+
+- Create bot users for every profile configured for the channel.
+- Connect existing bot users to the channel if missing.
+- Disconnect bot users that are no longer listed in the configured profiles.
+
+**Required settings format (per channel or server):**
+
+- `botName` (string): handle used to build the bot username.
+- `profiles` (array) **or** `profilesJson` (string JSON array).
+
+Each profile entry must include:
+- `id` (string, required)
+- `label` (string, optional) — used in display names
+
+Example profiles JSON:
+
+```json
+[
+  { "id": "general", "label": "General Assistant", "prompt": "Helpful, concise replies." }
+]
+```
+
+Notes:
+- If both `profiles` and `profilesJson` exist, `profiles` takes precedence.
+- If `botName` is missing or empty, no bot users are created.
+
 ---
 
 ## CI/CD: GitHub → GCS → Multiforum
@@ -145,7 +174,7 @@ gs://mf-plugins-prod/
       0.1.0/
         bundle.tgz
         bundle.sha256
-        plugin.json        # convenience copy
+        plugin.json        # optional convenience copy of the manifest
     hello-world/
       0.1.0/
         bundle.tgz
@@ -155,6 +184,8 @@ gs://mf-plugins-prod/
 ```
 
 > You can also store `plugins/<id>/latest.json` → `{ "version": "0.1.0" }` as a convenience (optional).
+> The optional `plugin.json` file above is just a readable copy of the manifest so humans (or tooling)
+> can inspect the version without unpacking the tarball.
 
 ### Tarball contents
 
@@ -259,6 +290,51 @@ gsutil cp "out/hello-world-${VERSION}.tgz" "gs://${BUCKET}/plugins/hello-world/$
 gsutil cp "out/hello-world-${VERSION}.sha256" "gs://${BUCKET}/plugins/hello-world/${VERSION}/bundle.sha256"
 gsutil cp registry.json "gs://${BUCKET}/registry.json"
 ```
+
+---
+
+## Creating a Plugin (from scratch)
+
+1. Create a new folder under `plugins/<id>/`.
+2. Add a `plugin.json` manifest with required fields (`id`, `name`, `version`, `entry`, `events`).
+3. Implement `index.ts` and export a default handler.
+4. Add a `package.json` with a `build` script that outputs `dist/index.js`.
+5. Run `npm install` then `npm run build` inside the plugin folder.
+6. Verify `dist/index.js` exists and matches the manifest `entry`.
+
+Minimum `plugin.json` example:
+
+```json
+{
+  "id": "my-plugin",
+  "name": "My Plugin",
+  "version": "0.1.0",
+  "description": "What it does",
+  "entry": "dist/index.js",
+  "events": ["comment.created"]
+}
+```
+
+Minimum `index.ts` example:
+
+```ts
+export default async function (ctx, event) {
+  ctx.log("Plugin ran for", event.type);
+}
+```
+
+---
+
+## Release / Publish Checklist
+
+Use this for either a new plugin or a version bump:
+
+1. Bump `plugin.json.version` (and `package.json.version` if present).
+2. Build the plugin: `npm run build:plugin -- --plugin <id>`.
+3. Create the bundle: `npm run bundle:create -- --plugin <id>`.
+4. Merge the version into the registry: `npm run registry:generate -- --plugin <id> --bucket gs://<bucket> --output registry.json`.
+5. Upload bundle + sha256 + registry to GCS.
+6. (Optional) Upload the convenience `plugin.json` to `gs://<bucket>/plugins/<id>/<version>/plugin.json`.
 
 ---
 

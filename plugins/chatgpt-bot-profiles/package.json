@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-bot-profiles",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ChatGPT-powered bot profiles for Multiforum comments",
   "main": "dist/index.js",
   "scripts": {

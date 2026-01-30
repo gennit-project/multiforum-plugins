@@ -1,7 +1,7 @@
 {
   "id": "beta-reader-bot",
   "name": "Beta Reader Bot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ChatGPT-powered beta reader with configurable creative writing feedback profiles",
   "entry": "dist/index.js",
   "events": [
@@ -27,7 +27,7 @@
       "chatgpt",
       "writing",
       "feedback",
-      "bots"
+      "bot"
     ]
   },
   "documentation": {
