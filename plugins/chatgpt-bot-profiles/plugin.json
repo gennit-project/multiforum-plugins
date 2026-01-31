@@ -1,7 +1,7 @@
 {
   "id": "chatgpt-bot-profiles",
   "name": "ChatGPT Bot Profiles",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "Responds to /bot mentions with ChatGPT-powered replies and configurable profiles",
   "entry": "dist/index.js",
   "events": [
@@ -52,7 +52,7 @@
     },
     "channel": {
       "overrideProfiles": false,
-      "botName": "",
+      "botName": "chatgpt-bot",
       "defaultProfileId": "",
       "profiles": [],
       "profilesJson": ""

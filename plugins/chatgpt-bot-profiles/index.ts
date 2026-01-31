@@ -293,8 +293,23 @@ export default class ChatgptBotProfiles {
     }
 
     const config = this.getEffectiveConfig();
+    this.logger("Effective bot configuration", {
+      botName: config.botName,
+      defaultProfileId: config.defaultProfileId,
+      availableProfiles: config.profiles.map((profile) => profile.id)
+    });
+
     const mentions = event.payload.botMentions || [];
+    this.logger("Received bot mentions", {
+      commentId: event.payload.commentId,
+      mentions
+    });
+
     const matchingMentions = mentions.filter((mention) => mention.handle === config.botName);
+    this.logger("Matching mentions for this bot", {
+      matchingCount: matchingMentions.length,
+      matchingMentions
+    });
 
     if (matchingMentions.length === 0) {
       return { success: true, result: { message: "No bot mentions found" } };
@@ -320,8 +335,12 @@ export default class ChatgptBotProfiles {
       const profile = this.resolveProfile(mention.profileId, config.profiles, config.defaultProfileId);
       if (profile) {
         uniqueProfiles.set(profile.id, profile);
+        this.logger(`Resolved profile for mention`, {
+          handle: mention.handle,
+          profileId: profile.id
+        });
       } else {
-        this.logger(`No profile found for mention ${mention.raw}`);
+        this.logger(`No profile found for mention`, { raw: mention.raw, profileId: mention.profileId });
       }
     }
 
@@ -333,6 +352,10 @@ export default class ChatgptBotProfiles {
 
     for (const profile of uniqueProfiles.values()) {
       try {
+        this.logger(`Generating reply for profile ${profile.id}`, {
+          systemPromptLength: profile.prompt.length,
+          userPrompt: this.buildUserPrompt(event.payload, profile).slice(0, 300)
+        });
         const replyText = await this.requestCompletion({
           model: config.model,
           temperature: config.temperature,
@@ -347,6 +370,11 @@ export default class ChatgptBotProfiles {
           profileId: profile.id,
           profileLabel: profile.displayName,
           parentCommentId: event.payload.commentId
+        });
+
+        this.logger("Bot comment created", {
+          profileId: profile.id,
+          commentId: created?.id
         });
 
         results.push({ profileId: profile.id, commentId: created?.id });

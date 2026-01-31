@@ -1,7 +1,7 @@
 {
   "id": "beta-reader-bot",
   "name": "Beta Reader Bot",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ChatGPT-powered beta reader with configurable creative writing feedback profiles",
   "entry": "dist/index.js",
   "events": [
@@ -70,7 +70,7 @@
     },
     "channel": {
       "overrideProfiles": false,
-      "botName": "",
+      "botName": "betabot",
       "defaultProfileId": "",
       "profiles": [],
       "profilesJson": ""
