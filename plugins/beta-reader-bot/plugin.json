@@ -19,9 +19,9 @@
   "metadata": {
     "author": {
       "name": "Multiforum Team",
-      "url": "https://github.com/listical/multiforum-plugins"
+      "url": "https://github.com/gennit-project/multiforum-plugins"
     },
-    "homepage": "https://github.com/listical/multiforum-plugins/tree/main/plugins/beta-reader-bot",
+    "homepage": "https://github.com/gennit-project/multiforum-plugins/tree/main/plugins/beta-reader-bot",
     "license": "MIT",
     "tags": [
       "chatgpt",
