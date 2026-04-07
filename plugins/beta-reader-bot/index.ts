@@ -29,6 +29,11 @@ interface HookContext {
     meta?: any;
   }) => Promise<void>;
   log: (...args: any[]) => void;
+  logPromptDebug?: (input: {
+    prompt: string;
+    context?: unknown;
+    label?: string;
+  }) => void;
   createCommentAsBot?: (input: {
     text: string;
     botName: string;
@@ -61,6 +66,36 @@ interface EventEnvelope {
       displayName?: string | null;
     } | null;
     parentCommentId?: string | null;
+    context?: {
+      invocationType?: string;
+      channel?: {
+        uniqueName?: string | null;
+        displayName?: string | null;
+        description?: string | null;
+        rules?: string | null;
+      } | null;
+      discussion?: {
+        id?: string | null;
+        title?: string | null;
+        body?: string | null;
+      } | null;
+      comment?: {
+        id?: string | null;
+        text?: string | null;
+        authorUsername?: string | null;
+        authorLabel?: string | null;
+        parentCommentId?: string | null;
+      } | null;
+      thread?: {
+        rootCommentId?: string | null;
+        parentComments?: Array<{
+          id?: string | null;
+          text?: string | null;
+          authorUsername?: string | null;
+          authorLabel?: string | null;
+        }>;
+      } | null;
+    } | null;
   };
 }
 
@@ -121,6 +156,12 @@ const normalizeProfile = (profile: any): BotProfile | null => {
 
   if (!id || !prompt) return null;
   return { id, displayName: displayName || id, prompt };
+};
+
+const pushContextLine = (parts: string[], label: string, value?: string | null) => {
+  if (isNonEmptyString(value)) {
+    parts.push(`${label}: ${value}`);
+  }
 };
 
 export default class BetaReaderBot {
@@ -207,22 +248,33 @@ export default class BetaReaderBot {
   }
 
   private buildUserPrompt(event: EventEnvelope["payload"], profile: BotProfile) {
+    const context = event.context;
+    const channel = context?.channel;
+    const discussion = context?.discussion;
+    const comment = context?.comment;
+    const parentComments = context?.thread?.parentComments || [];
     const parts: string[] = [];
     parts.push(`Profile: ${profile.displayName}`);
+    pushContextLine(parts, "Invocation type", context?.invocationType);
+    pushContextLine(parts, "Forum name", channel?.displayName || channel?.uniqueName);
+    pushContextLine(parts, "Forum description", channel?.description);
+    pushContextLine(parts, "Forum rules", channel?.rules);
+    pushContextLine(parts, "Discussion title", discussion?.title || event.discussion?.title);
+    pushContextLine(parts, "Discussion body", discussion?.body || event.discussion?.body);
+    pushContextLine(parts, "Comment author", comment?.authorLabel || comment?.authorUsername);
+    pushContextLine(parts, "Comment text", comment?.text || event.commentText);
 
-    if (event.discussion?.title) {
-      parts.push(`Discussion title: ${event.discussion.title}`);
-    }
-    if (event.discussion?.body) {
-      parts.push(`Discussion body: ${event.discussion.body}`);
-    }
-
-    if (event.commentText) {
-      parts.push(`Comment text: ${event.commentText}`);
-    }
-
-    if (event.parentCommentId) {
-      parts.push(`Parent comment id: ${event.parentCommentId}`);
+    if (parentComments.length > 0) {
+      parts.push(
+        `Parent comment thread:\n${parentComments
+          .map((parent, index) => {
+            const author = parent.authorLabel || parent.authorUsername || "Unknown author";
+            return `${index + 1}. ${author}: ${parent.text || ""}`;
+          })
+          .join("\n")}`
+      );
+    } else {
+      pushContextLine(parts, "Parent comment id", comment?.parentCommentId || event.parentCommentId);
     }
 
     return parts.join("\n\n");
@@ -333,12 +385,19 @@ export default class BetaReaderBot {
 
     for (const profile of uniqueProfiles.values()) {
       try {
+        const userPrompt = this.buildUserPrompt(event.payload, profile);
+        this.context.logPromptDebug?.({
+          label: `beta-reader-bot:${profile.id}`,
+          prompt: userPrompt,
+          context: event.payload.context || event.payload
+        });
+
         const replyText = await this.requestCompletion({
           model: config.model,
           temperature: config.temperature,
           maxTokens: config.maxTokens,
           systemPrompt: profile.prompt,
-          userPrompt: this.buildUserPrompt(event.payload, profile)
+          userPrompt
         });
 
         const created = await this.context.createCommentAsBot({
