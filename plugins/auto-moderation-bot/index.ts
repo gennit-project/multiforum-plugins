@@ -61,6 +61,7 @@ interface EventEnvelope {
     channel?: {
       uniqueName?: string | null;
       displayName?: string | null;
+      description?: string | null;
       rules?: string[];
     } | null;
     parentCommentId?: string | null;
