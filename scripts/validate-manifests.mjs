@@ -113,8 +113,10 @@ const validateManifest = async (pluginDir) => {
 };
 
 const main = async () => {
-  const pluginFolders = await readdir(PLUGINS_DIR);
-  const checks = pluginFolders.map((folder) => validateManifest(path.join(PLUGINS_DIR, folder)));
+  const pluginFolders = await readdir(PLUGINS_DIR, { withFileTypes: true });
+  const checks = pluginFolders
+    .filter((folder) => folder.isDirectory())
+    .map((folder) => validateManifest(path.join(PLUGINS_DIR, folder.name)));
   await Promise.all(checks);
 
   if (process.exitCode) {
