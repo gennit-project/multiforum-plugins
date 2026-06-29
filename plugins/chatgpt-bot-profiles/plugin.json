@@ -33,6 +33,14 @@
   "documentation": {
     "readmePath": "README.md"
   },
+  "source": {
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-chatgpt-bot-profiles",
+    "releaseNotesUrl": "https://github.com/gennit-project/multiforum-plugin-chatgpt-bot-profiles/releases/tag/v0.1.3"
+  },
+  "compatibility": {
+    "minServerVersion": "1.0.0",
+    "apiVersion": "1"
+  },
   "settingsDefaults": {
     "server": {
       "botName": "chatgpt-bot",

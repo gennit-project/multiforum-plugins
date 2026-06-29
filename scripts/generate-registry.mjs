@@ -14,6 +14,15 @@ const parseArgs = () => {
   const args = process.argv.slice(2);
   let bucket = process.env.BUCKET || 'gs://mf-plugins-prod';
   let outputPath = path.join(repoRoot, 'registry.json');
+  let sourceRepoUrl = process.env.SOURCE_REPO_URL || (
+    process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
+      ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`
+      : ''
+  );
+  let sourceCommit = process.env.SOURCE_COMMIT || process.env.GITHUB_SHA || '';
+  let releaseNotesUrl = process.env.RELEASE_NOTES_URL || '';
+  let minServerVersion = process.env.MIN_SERVER_VERSION || '';
+  let apiVersion = process.env.PLUGIN_API_VERSION || '';
   const plugins = new Set();
 
   for (let i = 0; i < args.length; i += 1) {
@@ -33,10 +42,44 @@ const parseArgs = () => {
       i += 1;
     } else if (arg.startsWith('--plugin=')) {
       plugins.add(arg.split('=')[1]);
+    } else if (arg === '--source-repo-url' && args[i + 1]) {
+      sourceRepoUrl = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--source-repo-url=')) {
+      sourceRepoUrl = arg.split('=')[1];
+    } else if (arg === '--source-commit' && args[i + 1]) {
+      sourceCommit = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--source-commit=')) {
+      sourceCommit = arg.split('=')[1];
+    } else if (arg === '--release-notes-url' && args[i + 1]) {
+      releaseNotesUrl = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--release-notes-url=')) {
+      releaseNotesUrl = arg.split('=')[1];
+    } else if (arg === '--min-server-version' && args[i + 1]) {
+      minServerVersion = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--min-server-version=')) {
+      minServerVersion = arg.split('=')[1];
+    } else if (arg === '--api-version' && args[i + 1]) {
+      apiVersion = args[i + 1];
+      i += 1;
+    } else if (arg.startsWith('--api-version=')) {
+      apiVersion = arg.split('=')[1];
     }
   }
 
-  return { bucket, outputPath, plugins: Array.from(plugins) };
+  return {
+    bucket,
+    outputPath,
+    plugins: Array.from(plugins),
+    sourceRepoUrl,
+    sourceCommit,
+    releaseNotesUrl,
+    minServerVersion,
+    apiVersion,
+  };
 };
 
 const bucketUrlFor = (bucket, id, version) => {
@@ -44,8 +87,45 @@ const bucketUrlFor = (bucket, id, version) => {
   return `${base}/plugins/${id}/${version}/bundle.tgz`;
 };
 
+const defaultReleaseNotesUrl = (repoUrl, id, version) => {
+  if (!repoUrl) return '';
+  const base = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl;
+  return `${base}/releases/tag/${id}@${version}`;
+};
+
+const optionalString = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+};
+
+const releaseMetadataFor = (manifest, args) => {
+  const source = manifest.source || {};
+  const compatibility = manifest.compatibility || {};
+  const repoUrl = optionalString(args.sourceRepoUrl, source.repoUrl);
+  const version = {
+    releaseNotesUrl: optionalString(
+      args.releaseNotesUrl,
+      source.releaseNotesUrl,
+      defaultReleaseNotesUrl(repoUrl, manifest.id, manifest.version)
+    ),
+    sourceRepoUrl: repoUrl,
+    sourceCommit: optionalString(args.sourceCommit, source.commit),
+    minServerVersion: optionalString(args.minServerVersion, compatibility.minServerVersion),
+    apiVersion: optionalString(args.apiVersion, compatibility.apiVersion),
+  };
+
+  return Object.fromEntries(
+    Object.entries(version).filter(([, value]) => Boolean(value))
+  );
+};
+
 const main = async () => {
-  const { bucket, outputPath, plugins } = parseArgs();
+  const args = parseArgs();
+  const { bucket, outputPath, plugins } = args;
 
   const entries = await fs.readdir(pluginsRoot, { withFileTypes: true });
   let pluginDirs = entries.filter((entry) => entry.isDirectory());
@@ -96,6 +176,7 @@ const main = async () => {
           version: pluginVersion,
           tarballUrl: bucketUrlFor(bucket, manifest.id, pluginVersion),
           integritySha256,
+          ...releaseMetadataFor(manifest, args),
         },
       ],
     });

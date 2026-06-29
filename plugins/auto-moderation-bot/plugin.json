@@ -33,6 +33,14 @@
   "documentation": {
     "readmePath": "README.md"
   },
+  "source": {
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-auto-moderation-bot",
+    "releaseNotesUrl": "https://github.com/gennit-project/multiforum-plugin-auto-moderation-bot/releases/tag/v0.1.0"
+  },
+  "compatibility": {
+    "minServerVersion": "1.0.0",
+    "apiVersion": "1"
+  },
   "settingsDefaults": {
     "server": {
       "botName": "automod",

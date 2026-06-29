@@ -37,6 +37,25 @@ const assertArray = (value, message) => {
   }
 };
 
+const isObject = (value) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const isNonEmptyString = (value) =>
+  typeof value === 'string' && value.trim().length > 0;
+
+const isSemverLike = (value) =>
+  isNonEmptyString(value) && /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(value);
+
+const isUrlLike = (value) => {
+  if (!isNonEmptyString(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const validateMetadata = (pluginId, manifest) => {
   const metadata = manifest.metadata;
   if (!metadata) {
@@ -66,6 +85,56 @@ const validateUI = (pluginId, manifest) => {
 
   if (!('server' in ui.forms) || !('channel' in ui.forms)) {
     fail(`${pluginId}: ui.forms.server and ui.forms.channel must be present (use empty arrays if not applicable)`);
+  }
+};
+
+const validateCompatibility = (pluginId, manifest) => {
+  const compatibility = manifest.compatibility;
+  if (compatibility === undefined) {
+    return;
+  }
+
+  if (!isObject(compatibility)) {
+    fail(`${pluginId}: compatibility must be an object when present`);
+    return;
+  }
+
+  if (
+    compatibility.minServerVersion !== undefined &&
+    !isSemverLike(compatibility.minServerVersion)
+  ) {
+    fail(`${pluginId}: compatibility.minServerVersion must be a semver string such as "1.0.0"`);
+  }
+
+  if (
+    compatibility.apiVersion !== undefined &&
+    !isNonEmptyString(compatibility.apiVersion)
+  ) {
+    fail(`${pluginId}: compatibility.apiVersion must be a non-empty string`);
+  }
+};
+
+const validateSource = (pluginId, manifest) => {
+  const source = manifest.source;
+  if (source === undefined) {
+    return;
+  }
+
+  if (!isObject(source)) {
+    fail(`${pluginId}: source must be an object when present`);
+    return;
+  }
+
+  if (source.repoUrl !== undefined && !isUrlLike(source.repoUrl)) {
+    fail(`${pluginId}: source.repoUrl must be an http(s) URL`);
+  }
+
+  if (source.releaseNotesUrl !== undefined && !isUrlLike(source.releaseNotesUrl)) {
+    fail(`${pluginId}: source.releaseNotesUrl must be an http(s) URL`);
+  }
+
+  if (source.commit !== undefined && !isNonEmptyString(source.commit)) {
+    fail(`${pluginId}: source.commit must be a non-empty string`);
   }
 };
 
@@ -109,6 +178,8 @@ const validateManifest = async (pluginDir) => {
 
   validateMetadata(pluginId, manifest);
   validateUI(pluginId, manifest);
+  validateCompatibility(pluginId, manifest);
+  validateSource(pluginId, manifest);
   await validateReadme(pluginId, pluginDir, manifest);
 };
 
