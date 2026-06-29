@@ -7,22 +7,11 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const pluginsRoot = path.join(repoRoot, 'plugins');
-const outRoot = path.join(repoRoot, 'out');
+const sourcesPath = path.join(repoRoot, 'registry-sources.json');
 
 const parseArgs = () => {
   const args = process.argv.slice(2);
   let outputPath = path.join(repoRoot, 'registry.json');
-  let sourceRepoUrl = process.env.SOURCE_REPO_URL || (
-    process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
-      ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`
-      : ''
-  );
-  let sourceCommit = process.env.SOURCE_COMMIT || process.env.GITHUB_SHA || '';
-  let releaseNotesUrl = process.env.RELEASE_NOTES_URL || '';
-  let minServerVersion = process.env.MIN_SERVER_VERSION || '';
-  let apiVersion = process.env.PLUGIN_API_VERSION || '';
-  const plugins = new Set();
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -31,49 +20,82 @@ const parseArgs = () => {
       i += 1;
     } else if (arg.startsWith('--output=')) {
       outputPath = path.resolve(arg.split('=')[1]);
-    } else if (arg === '--plugin' && args[i + 1]) {
-      plugins.add(args[i + 1]);
-      i += 1;
-    } else if (arg.startsWith('--plugin=')) {
-      plugins.add(arg.split('=')[1]);
-    } else if (arg === '--source-repo-url' && args[i + 1]) {
-      sourceRepoUrl = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--source-repo-url=')) {
-      sourceRepoUrl = arg.split('=')[1];
-    } else if (arg === '--source-commit' && args[i + 1]) {
-      sourceCommit = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--source-commit=')) {
-      sourceCommit = arg.split('=')[1];
-    } else if (arg === '--release-notes-url' && args[i + 1]) {
-      releaseNotesUrl = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--release-notes-url=')) {
-      releaseNotesUrl = arg.split('=')[1];
-    } else if (arg === '--min-server-version' && args[i + 1]) {
-      minServerVersion = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--min-server-version=')) {
-      minServerVersion = arg.split('=')[1];
-    } else if (arg === '--api-version' && args[i + 1]) {
-      apiVersion = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--api-version=')) {
-      apiVersion = arg.split('=')[1];
     }
   }
 
-  return {
-    outputPath,
-    plugins: Array.from(plugins),
-    sourceRepoUrl,
-    sourceCommit,
-    releaseNotesUrl,
-    minServerVersion,
-    apiVersion,
-  };
+  return { outputPath };
 };
+
+const normalizeGitHubRepoUrl = (url) => {
+  const parsed = new URL(url);
+  const parts = parsed.pathname.split('/').filter(Boolean);
+  if (parsed.hostname !== 'github.com' || parts.length < 2) {
+    throw new Error(`Expected a GitHub repository URL, got ${url}`);
+  }
+
+  const owner = parts[0];
+  const repo = parts[1].replace(/\.git$/, '');
+  return `https://github.com/${owner}/${repo}`;
+};
+
+const githubApiHeaders = () => {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  return token
+    ? {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${token}`,
+        'x-github-api-version': '2022-11-28'
+      }
+    : {
+        accept: 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28'
+      };
+};
+
+const fetchGitHubJson = async (url) => {
+  const response = await fetch(url, { headers: githubApiHeaders() });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+const fetchGitHubText = async (url) => {
+  const response = await fetch(url, { headers: githubApiHeaders() });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  return response.text();
+};
+
+const compareVersions = (a, b) => {
+  const normalize = (version) => version.replace(/^v/i, '');
+  const parse = (version) => {
+    const [core, prerelease] = normalize(version).split('-', 2);
+    const parts = core.split('.').map((part) => {
+      const parsed = Number.parseInt(part, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    });
+    while (parts.length < 3) parts.push(0);
+    return { parts, prerelease: prerelease || '' };
+  };
+
+  const parsedA = parse(a);
+  const parsedB = parse(b);
+
+  for (let i = 0; i < Math.max(parsedA.parts.length, parsedB.parts.length); i += 1) {
+    const aPart = parsedA.parts[i] || 0;
+    const bPart = parsedB.parts[i] || 0;
+    if (aPart !== bPart) return aPart - bPart;
+  }
+
+  if (parsedA.prerelease && !parsedB.prerelease) return -1;
+  if (!parsedA.prerelease && parsedB.prerelease) return 1;
+  return parsedA.prerelease.localeCompare(parsedB.prerelease);
+};
+
+const sortVersionsDescending = (versions) =>
+  [...versions].sort((a, b) => compareVersions(b.version, a.version));
 
 export const releaseTarballUrlFor = (repoUrl, id, version) => {
   if (!repoUrl) return '';
@@ -87,7 +109,7 @@ export const defaultReleaseNotesUrl = (repoUrl, version) => {
   return `${base}/releases/tag/v${version}`;
 };
 
-export const optionalString = (...values) => {
+const optionalString = (...values) => {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) {
       return value.trim();
@@ -96,104 +118,86 @@ export const optionalString = (...values) => {
   return '';
 };
 
-export const releaseMetadataFor = (manifest, args) => {
-  const source = manifest.source || {};
-  const compatibility = manifest.compatibility || {};
-  const repoUrl = optionalString(args.sourceRepoUrl, source.repoUrl);
-  const pluginVersion = manifest.version;
-  const version = {
-    releaseNotesUrl: optionalString(
-      args.releaseNotesUrl,
-      source.releaseNotesUrl,
-      defaultReleaseNotesUrl(repoUrl, pluginVersion)
-    ),
-    sourceRepoUrl: repoUrl,
-    sourceCommit: optionalString(args.sourceCommit, source.commit),
-    minServerVersion: optionalString(args.minServerVersion, compatibility.minServerVersion),
-    apiVersion: optionalString(args.apiVersion, compatibility.apiVersion),
-  };
+const loadRegistrySources = async () => {
+  const raw = await fs.readFile(sourcesPath, 'utf8');
+  const sources = JSON.parse(raw);
+  if (!Array.isArray(sources) || sources.length === 0) {
+    throw new Error('registry-sources.json must contain at least one source');
+  }
+  return sources;
+};
 
-  return Object.fromEntries(
-    Object.entries(version).filter(([, value]) => Boolean(value))
-  );
+const buildRegistryVersionFromRelease = async (source, release) => {
+  const assets = release.assets || [];
+  const manifestAsset = assets.find((asset) => asset.name === 'plugin.json' && asset.browser_download_url);
+  const tarballAsset = assets.find((asset) => asset.name?.endsWith('.tgz') && asset.browser_download_url);
+  const checksumAsset = assets.find((asset) => asset.name?.endsWith('.tgz.sha256') && asset.browser_download_url);
+
+  if (!manifestAsset?.browser_download_url || !tarballAsset?.browser_download_url || !checksumAsset?.browser_download_url) {
+    return null;
+  }
+
+  const manifest = JSON.parse(await fetchGitHubText(manifestAsset.browser_download_url));
+  if (manifest?.id !== source.id || !manifest?.version) {
+    return null;
+  }
+
+  const integritySha256 = (await fetchGitHubText(checksumAsset.browser_download_url)).split(/\s+/)[0]?.trim();
+  if (!integritySha256) {
+    return null;
+  }
+
+  const repoUrl = normalizeGitHubRepoUrl(source.repoUrl);
+  const version = manifest.version;
+
+  return {
+    version,
+    tarballUrl: tarballAsset.browser_download_url,
+    integritySha256,
+    releaseNotesUrl: release.html_url || manifest.source?.releaseNotesUrl || defaultReleaseNotesUrl(repoUrl, version),
+    sourceRepoUrl: manifest.source?.repoUrl || repoUrl,
+    sourceCommit: manifest.source?.commit || release.target_commitish || '',
+    minServerVersion: optionalString(manifest.compatibility?.minServerVersion),
+    apiVersion: optionalString(manifest.compatibility?.apiVersion),
+  };
+};
+
+export const buildRegistryPluginFromSource = async (source) => {
+  const repoUrl = normalizeGitHubRepoUrl(source.repoUrl);
+  const parsed = new URL(repoUrl);
+  const [owner, repo] = parsed.pathname.split('/').filter(Boolean);
+  const releasesUrl = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`;
+  const releases = await fetchGitHubJson(releasesUrl);
+
+  const versions = [];
+  for (const release of releases || []) {
+    const version = await buildRegistryVersionFromRelease(source, release);
+    if (version) {
+      versions.push(version);
+    }
+  }
+
+  return {
+    id: source.id,
+    versions: sortVersionsDescending(versions)
+  };
 };
 
 const main = async () => {
   const args = parseArgs();
-  const { outputPath, plugins } = args;
-
-  const entries = await fs.readdir(pluginsRoot, { withFileTypes: true });
-  let pluginDirs = entries.filter((entry) => entry.isDirectory());
-  if (plugins.length > 0) {
-    pluginDirs = pluginDirs.filter((entry) => plugins.includes(entry.name));
-  }
-
-  if (pluginDirs.length === 0) {
-    console.error('No plugin directories found under ./plugins.');
-    process.exit(1);
-  }
-
-  const pluginEntries = [];
-
-  for (const dirent of pluginDirs) {
-    const pluginPath = path.join(pluginsRoot, dirent.name);
-    const manifestPath = path.join(pluginPath, 'plugin.json');
-    const manifestRaw = await fs.readFile(manifestPath, 'utf8');
-    const manifest = JSON.parse(manifestRaw);
-
-    if (!manifest.id) {
-      throw new Error(`plugin.json in ${dirent.name} is missing an "id".`);
-    }
-
-    if (!manifest.version) {
-      throw new Error(`plugin.json in ${dirent.name} is missing a "version".`);
-    }
-
-    const pluginVersion = manifest.version;
-    const tarballPath = path.join(outRoot, `${manifest.id}-${pluginVersion}.tgz`);
-    const hashPath = path.join(outRoot, `${manifest.id}-${pluginVersion}.sha256`);
-
-    try {
-      await fs.access(tarballPath);
-      await fs.access(hashPath);
-    } catch {
-      throw new Error(
-        `Missing bundle or hash for ${manifest.id}. Did you run "npm run bundle:create -- --plugin ${manifest.id}"?`
-      );
-    }
-
-    const integritySha256 = (await fs.readFile(hashPath, 'utf8')).trim();
-    const sourceRepoUrl = optionalString(args.sourceRepoUrl, manifest.source?.repoUrl);
-    if (!sourceRepoUrl) {
-      throw new Error(`Missing source repo URL for ${manifest.id}`);
-    }
-    const tarballUrl = releaseTarballUrlFor(sourceRepoUrl, manifest.id, pluginVersion);
-
-    pluginEntries.push({
-      id: manifest.id,
-      versions: [
-        {
-          version: pluginVersion,
-          tarballUrl,
-          integritySha256,
-          ...releaseMetadataFor(manifest, args),
-        },
-      ],
-    });
-  }
+  const sources = await loadRegistrySources();
 
   const registry = {
     updatedAt: new Date().toISOString(),
-    plugins: pluginEntries,
+    plugins: []
   };
 
-  await fs.writeFile(
-    outputPath,
-    `${JSON.stringify(registry, null, 2)}\n`,
-    'utf8'
-  );
+  for (const source of sources) {
+    registry.plugins.push(await buildRegistryPluginFromSource(source));
+  }
 
-  console.log(`registry.json written to ${outputPath}`);
+  await fs.writeFile(args.outputPath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
+  console.log(`registry.json written to ${args.outputPath}`);
 };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
