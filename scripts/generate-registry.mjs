@@ -12,7 +12,6 @@ const outRoot = path.join(repoRoot, 'out');
 
 const parseArgs = () => {
   const args = process.argv.slice(2);
-  let bucket = process.env.BUCKET || 'gs://mf-plugins-prod';
   let outputPath = path.join(repoRoot, 'registry.json');
   let sourceRepoUrl = process.env.SOURCE_REPO_URL || (
     process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
@@ -27,12 +26,7 @@ const parseArgs = () => {
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
-    if (arg === '--bucket' && args[i + 1]) {
-      bucket = args[i + 1];
-      i += 1;
-    } else if (arg.startsWith('--bucket=')) {
-      bucket = arg.split('=')[1];
-    } else if (arg === '--output' && args[i + 1]) {
+    if (arg === '--output' && args[i + 1]) {
       outputPath = path.resolve(args[i + 1]);
       i += 1;
     } else if (arg.startsWith('--output=')) {
@@ -71,7 +65,6 @@ const parseArgs = () => {
   }
 
   return {
-    bucket,
     outputPath,
     plugins: Array.from(plugins),
     sourceRepoUrl,
@@ -82,18 +75,19 @@ const parseArgs = () => {
   };
 };
 
-const bucketUrlFor = (bucket, id, version) => {
-  const base = bucket.endsWith('/') ? bucket.slice(0, -1) : bucket;
-  return `${base}/plugins/${id}/${version}/bundle.tgz`;
-};
-
-const defaultReleaseNotesUrl = (repoUrl, id, version) => {
+export const releaseTarballUrlFor = (repoUrl, id, version) => {
   if (!repoUrl) return '';
   const base = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl;
-  return `${base}/releases/tag/${id}@${version}`;
+  return `${base}/releases/download/v${version}/${id}-${version}.tgz`;
 };
 
-const optionalString = (...values) => {
+export const defaultReleaseNotesUrl = (repoUrl, version) => {
+  if (!repoUrl) return '';
+  const base = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl;
+  return `${base}/releases/tag/v${version}`;
+};
+
+export const optionalString = (...values) => {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) {
       return value.trim();
@@ -102,15 +96,16 @@ const optionalString = (...values) => {
   return '';
 };
 
-const releaseMetadataFor = (manifest, args) => {
+export const releaseMetadataFor = (manifest, args) => {
   const source = manifest.source || {};
   const compatibility = manifest.compatibility || {};
   const repoUrl = optionalString(args.sourceRepoUrl, source.repoUrl);
+  const pluginVersion = manifest.version;
   const version = {
     releaseNotesUrl: optionalString(
       args.releaseNotesUrl,
       source.releaseNotesUrl,
-      defaultReleaseNotesUrl(repoUrl, manifest.id, manifest.version)
+      defaultReleaseNotesUrl(repoUrl, pluginVersion)
     ),
     sourceRepoUrl: repoUrl,
     sourceCommit: optionalString(args.sourceCommit, source.commit),
@@ -125,7 +120,7 @@ const releaseMetadataFor = (manifest, args) => {
 
 const main = async () => {
   const args = parseArgs();
-  const { bucket, outputPath, plugins } = args;
+  const { outputPath, plugins } = args;
 
   const entries = await fs.readdir(pluginsRoot, { withFileTypes: true });
   let pluginDirs = entries.filter((entry) => entry.isDirectory());
@@ -168,13 +163,18 @@ const main = async () => {
     }
 
     const integritySha256 = (await fs.readFile(hashPath, 'utf8')).trim();
+    const sourceRepoUrl = optionalString(args.sourceRepoUrl, manifest.source?.repoUrl);
+    if (!sourceRepoUrl) {
+      throw new Error(`Missing source repo URL for ${manifest.id}`);
+    }
+    const tarballUrl = releaseTarballUrlFor(sourceRepoUrl, manifest.id, pluginVersion);
 
     pluginEntries.push({
       id: manifest.id,
       versions: [
         {
           version: pluginVersion,
-          tarballUrl: bucketUrlFor(bucket, manifest.id, pluginVersion),
+          tarballUrl,
           integritySha256,
           ...releaseMetadataFor(manifest, args),
         },
@@ -182,38 +182,9 @@ const main = async () => {
     });
   }
 
-  let existingRegistry = { updatedAt: '', plugins: [] };
-  try {
-    const existingRaw = await fs.readFile(outputPath, 'utf8');
-    existingRegistry = JSON.parse(existingRaw);
-  } catch {
-    // OK if registry does not exist yet
-  }
-
-  const merged = new Map();
-  for (const entry of existingRegistry.plugins || []) {
-    if (entry?.id) {
-      merged.set(entry.id, { id: entry.id, versions: entry.versions || [] });
-    }
-  }
-
-  for (const entry of pluginEntries) {
-    const current = merged.get(entry.id) || { id: entry.id, versions: [] };
-    const nextVersion = entry.versions[0];
-    const existingIndex = current.versions.findIndex(
-      (item) => item.version === nextVersion.version
-    );
-    if (existingIndex >= 0) {
-      current.versions[existingIndex] = nextVersion;
-    } else {
-      current.versions.push(nextVersion);
-    }
-    merged.set(entry.id, current);
-  }
-
   const registry = {
     updatedAt: new Date().toISOString(),
-    plugins: Array.from(merged.values()),
+    plugins: pluginEntries,
   };
 
   await fs.writeFile(
@@ -225,7 +196,9 @@ const main = async () => {
   console.log(`registry.json written to ${outputPath}`);
 };
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
+  });
+}

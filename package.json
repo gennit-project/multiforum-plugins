@@ -9,6 +9,7 @@
     "build": "node scripts/run-plugin-script.mjs build --plugin security-attachment-scan && node scripts/run-plugin-script.mjs build --plugin hello-world && node scripts/run-plugin-script.mjs build --plugin chatgpt-bot-profiles && node scripts/run-plugin-script.mjs build --plugin beta-reader-bot && node scripts/run-plugin-script.mjs build --plugin auto-moderation-bot",
     "install:all": "node scripts/run-plugin-script.mjs install --plugin security-attachment-scan && node scripts/run-plugin-script.mjs install --plugin hello-world && node scripts/run-plugin-script.mjs install --plugin chatgpt-bot-profiles && node scripts/run-plugin-script.mjs install --plugin beta-reader-bot && node scripts/run-plugin-script.mjs install --plugin auto-moderation-bot",
     "lint:manifests": "node scripts/validate-manifests.mjs",
+    "test:registry": "node --test scripts/generate-registry.test.mjs",
     "bundle:create": "node scripts/create-bundles.mjs",
     "registry:generate": "node scripts/generate-registry.mjs"
   },
