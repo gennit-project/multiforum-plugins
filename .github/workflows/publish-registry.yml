@@ -1,0 +1,64 @@
+name: Publish Registry
+
+# Regenerates registry.json from registry-sources.json (reading each standalone
+# plugin repo's GitHub Releases) and uploads it to the GCS object that
+# production reads: gs://mf-plugins-prod/registry.json
+#
+# Triggers:
+#   - workflow_dispatch: publish on demand (e.g. right after a plugin cuts a
+#     new release in its own repo).
+#   - push to main touching the sources/generator: republish when the plugin
+#     list changes.
+#   - schedule: a daily safety net so new plugin versions get picked up even if
+#     no one triggers a manual run.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - registry-sources.json
+      - scripts/generate-registry.mjs
+      - .github/workflows/publish-registry.yml
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: publish-registry
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GCS_BUCKET: mf-plugins-prod
+      REGISTRY_OBJECT: registry.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # generate-registry.mjs reads registry-sources.json and calls the GitHub
+      # Releases API for each plugin repo. GITHUB_TOKEN raises the API rate
+      # limit and covers public reads.
+      - name: Generate registry.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run registry:generate
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upload registry.json to GCS
+        run: gcloud storage cp registry.json "gs://${GCS_BUCKET}/${REGISTRY_OBJECT}"
