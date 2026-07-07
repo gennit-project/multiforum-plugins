@@ -4,10 +4,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build outputs
-dist/
-out/
-
 # Environment variables
 .env
 .env.local
@@ -37,11 +33,5 @@ logs/
 coverage/
 .nyc_output/
 
-# Plugin-specific build artifacts
-plugins/*/dist/
-plugins/*/node_modules/
-
-# CI/CD artifacts
+# Generated registry (produced by `npm run registry:generate`)
 registry.json
-*.tgz
-*.sha256
