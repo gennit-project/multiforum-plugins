@@ -1,8 +1,14 @@
 name: Publish Registry
 
-# Regenerates registry.json from registry-sources.json (reading each standalone
-# plugin repo's GitHub Releases) and uploads it to the GCS object that
-# production reads: gs://mf-plugins-prod/registry.json
+# Regenerates the registry files from registry-sources.json (reading each
+# standalone plugin repo's GitHub Releases) and uploads them to the GCS objects
+# that production reads:
+#   gs://mf-plugins-prod/registry.json              (default registry)
+#   gs://mf-plugins-prod/registry-experimental.json (experimental registry)
+#
+# A server opts into a registry by adding its URL to the server config's
+# pluginRegistries list; the split here is only about which plugins are
+# published to which URL.
 #
 # Triggers:
 #   - workflow_dispatch: publish on demand (e.g. right after a plugin cuts a
@@ -36,7 +42,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GCS_BUCKET: mf-plugins-prod
-      REGISTRY_OBJECT: registry.json
     steps:
       - uses: actions/checkout@v4
 
@@ -46,8 +51,10 @@ jobs:
 
       # generate-registry.mjs reads registry-sources.json and calls the GitHub
       # Releases API for each plugin repo. GITHUB_TOKEN raises the API rate
-      # limit and covers public reads.
-      - name: Generate registry.json
+      # limit and covers public reads. With no flags it writes one registry file
+      # per registry id referenced in the sources (registry.json and
+      # registry-experimental.json).
+      - name: Generate registry files
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run registry:generate
@@ -60,5 +67,7 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Upload registry.json to GCS
-        run: gcloud storage cp registry.json "gs://${GCS_BUCKET}/${REGISTRY_OBJECT}"
+      - name: Upload registry files to GCS
+        run: |
+          gcloud storage cp registry.json "gs://${GCS_BUCKET}/registry.json"
+          gcloud storage cp registry-experimental.json "gs://${GCS_BUCKET}/registry-experimental.json"

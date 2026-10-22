@@ -9,9 +9,44 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const sourcesPath = path.join(repoRoot, 'registry-sources.json');
 
+// A source may be assigned to a named registry so its plugins are published to
+// a separate registry file (and its own GCS object). This is purely a
+// publishing-side convenience for grouping which plugins land in which registry
+// URL — it is NOT a release channel. The generated registry files carry no
+// grouping marker, and the app does not derive anything (e.g. "experimental")
+// from which registry a plugin came from; that is tracked per plugin version
+// inside the app itself.
+export const DEFAULT_REGISTRY_ID = 'default';
+
+// Conventional output filename per registry id. Unknown ids fall back to
+// `registry-<id>.json`.
+const REGISTRY_OUTPUT_FILES = {
+  default: 'registry.json',
+  experimental: 'registry-experimental.json'
+};
+
+export const registryIdOf = (source) => {
+  const id = typeof source?.registry === 'string' ? source.registry.trim() : '';
+  return id || DEFAULT_REGISTRY_ID;
+};
+
+export const outputFileForRegistry = (registryId) =>
+  REGISTRY_OUTPUT_FILES[registryId] || `registry-${registryId}.json`;
+
+export const distinctRegistryIds = (sources) => {
+  const seen = new Set(sources.map(registryIdOf));
+  // Default registry first, then the rest alphabetically, for stable ordering.
+  return [...seen].sort((a, b) => {
+    if (a === DEFAULT_REGISTRY_ID) return -1;
+    if (b === DEFAULT_REGISTRY_ID) return 1;
+    return a.localeCompare(b);
+  });
+};
+
 const parseArgs = () => {
   const args = process.argv.slice(2);
-  let outputPath = path.join(repoRoot, 'registry.json');
+  let outputPath = null;
+  let registryId = null;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -20,10 +55,15 @@ const parseArgs = () => {
       i += 1;
     } else if (arg.startsWith('--output=')) {
       outputPath = path.resolve(arg.split('=')[1]);
+    } else if (arg === '--registry' && args[i + 1]) {
+      registryId = args[i + 1].trim();
+      i += 1;
+    } else if (arg.startsWith('--registry=')) {
+      registryId = arg.split('=')[1].trim();
     }
   }
 
-  return { outputPath };
+  return { outputPath, registryId };
 };
 
 const normalizeGitHubRepoUrl = (url) => {
@@ -183,10 +223,9 @@ export const buildRegistryPluginFromSource = async (source) => {
   };
 };
 
-const main = async () => {
-  const args = parseArgs();
-  const sources = await loadRegistrySources();
-
+const buildRegistry = async (sources) => {
+  // Output shape is intentionally registry-grouping-agnostic: the app reads
+  // only `updatedAt` and `plugins`.
   const registry = {
     updatedAt: new Date().toISOString(),
     plugins: []
@@ -196,8 +235,42 @@ const main = async () => {
     registry.plugins.push(await buildRegistryPluginFromSource(source));
   }
 
-  await fs.writeFile(args.outputPath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
-  console.log(`registry.json written to ${args.outputPath}`);
+  return registry;
+};
+
+const main = async () => {
+  const { outputPath, registryId } = parseArgs();
+  const sources = await loadRegistrySources();
+
+  // Decide which registries to build this run:
+  //   --registry <id>         -> just that registry
+  //   --output <path> (alone) -> the default registry, to that path (back-compat)
+  //   (no flags)              -> every registry referenced by the sources
+  let registriesToBuild;
+  if (registryId) {
+    registriesToBuild = [registryId];
+  } else if (outputPath) {
+    registriesToBuild = [DEFAULT_REGISTRY_ID];
+  } else {
+    registriesToBuild = distinctRegistryIds(sources);
+  }
+
+  const singleRegistry = registriesToBuild.length === 1;
+
+  for (const id of registriesToBuild) {
+    const registrySources = sources.filter((source) => registryIdOf(source) === id);
+    const registry = await buildRegistry(registrySources);
+
+    // --output only applies when a single registry is being produced; otherwise
+    // each registry goes to its conventional filename.
+    const target =
+      singleRegistry && outputPath
+        ? outputPath
+        : path.join(repoRoot, outputFileForRegistry(id));
+
+    await fs.writeFile(target, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
+    console.log(`[${id}] registry written to ${target} (${registry.plugins.length} plugin(s))`);
+  }
 };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {

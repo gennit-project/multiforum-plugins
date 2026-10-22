@@ -33,5 +33,6 @@ logs/
 coverage/
 .nyc_output/
 
-# Generated registry (produced by `npm run registry:generate`)
+# Generated registries (produced by `npm run registry:generate`)
 registry.json
+registry-experimental.json

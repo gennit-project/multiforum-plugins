@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
-import { buildRegistryPluginFromSource, releaseTarballUrlFor, defaultReleaseNotesUrl } from './generate-registry.mjs';
+import {
+  buildRegistryPluginFromSource,
+  releaseTarballUrlFor,
+  defaultReleaseNotesUrl,
+  registryIdOf,
+  outputFileForRegistry,
+  distinctRegistryIds,
+  DEFAULT_REGISTRY_ID
+} from './generate-registry.mjs';
 
 const originalFetch = globalThis.fetch;
 
@@ -46,6 +54,28 @@ test('release URL helpers build GitHub release asset URLs', () => {
     defaultReleaseNotesUrl('https://github.com/gennit-project/multiforum-plugin-hello-world', '0.2.2'),
     'https://github.com/gennit-project/multiforum-plugin-hello-world/releases/tag/v0.2.2'
   );
+});
+
+test('registryIdOf defaults to the default registry and trims explicit ids', () => {
+  assert.equal(registryIdOf({ id: 'a' }), DEFAULT_REGISTRY_ID);
+  assert.equal(registryIdOf({ id: 'a', registry: '' }), DEFAULT_REGISTRY_ID);
+  assert.equal(registryIdOf({ id: 'a', registry: '  experimental  ' }), 'experimental');
+});
+
+test('outputFileForRegistry maps known ids and falls back for unknown ones', () => {
+  assert.equal(outputFileForRegistry('default'), 'registry.json');
+  assert.equal(outputFileForRegistry('experimental'), 'registry-experimental.json');
+  assert.equal(outputFileForRegistry('canary'), 'registry-canary.json');
+});
+
+test('distinctRegistryIds lists the default registry first', () => {
+  const sources = [
+    { id: 'beta', registry: 'experimental' },
+    { id: 'stable-a' },
+    { id: 'stable-b', registry: 'default' },
+    { id: 'edge', registry: 'canary' }
+  ];
+  assert.deepEqual(distinctRegistryIds(sources), ['default', 'canary', 'experimental']);
 });
 
 test('buildRegistryPluginFromSource synthesizes versions from repo releases', async () => {

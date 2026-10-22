@@ -1,22 +1,27 @@
 [
   {
     "id": "auto-moderation-bot",
-    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-auto-moderation-bot"
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-auto-moderation-bot",
+    "registry": "default"
   },
   {
     "id": "beta-reader-bot",
-    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-beta-reader-bot"
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-beta-reader-bot",
+    "registry": "experimental"
   },
   {
     "id": "chatgpt-bot-profiles",
-    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-chatgpt-bot-profiles"
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-chatgpt-bot-profiles",
+    "registry": "default"
   },
   {
     "id": "hello-world",
-    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-hello-world"
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-hello-world",
+    "registry": "default"
   },
   {
     "id": "security-attachment-scan",
-    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-security-attachment-scan"
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-security-attachment-scan",
+    "registry": "default"
   }
 ]
