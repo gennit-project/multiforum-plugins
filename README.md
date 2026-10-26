@@ -10,6 +10,7 @@ The plugin implementations live in their own repositories:
 - `multiforum-plugin-chatgpt-bot-profiles`
 - `multiforum-plugin-hello-world`
 - `multiforum-plugin-security-attachment-scan`
+- `multiforum-plugin-llm-moderation` (experimental registry)
 
 `scripts/generate-registry.mjs` reads `registry-sources.json`, fetches each repo's
 GitHub Releases, and writes one registry file per registry group.
