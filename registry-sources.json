@@ -20,6 +20,11 @@
     "registry": "default"
   },
   {
+    "id": "llm-moderation",
+    "repoUrl": "https://github.com/gennit-project/multiforum-plugin-llm-moderation",
+    "registry": "default"
+  },
+  {
     "id": "security-attachment-scan",
     "repoUrl": "https://github.com/gennit-project/multiforum-plugin-security-attachment-scan",
     "registry": "default"
